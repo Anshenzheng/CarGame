@@ -190,6 +190,13 @@ class CarGame {
         this.isGrayscale = true;
         this.shakeIntensity = 20;
         
+        // 清除所有擦边效果
+        this.nearMissEffect = false;
+        this.nearMissTimer = 0;
+        
+        // 清除分数弹出
+        this.scorePopups = [];
+        
         // 显示游戏结束界面
         setTimeout(() => {
             document.getElementById('gameover-screen').classList.remove('hidden');
@@ -254,15 +261,19 @@ class CarGame {
     }
     
     updatePlayer() {
-        // 计算边界
-        const minX = this.trackOffset + this.player.width / 2;
-        const maxX = this.trackOffset + this.trackWidth - this.player.width / 2;
+        // 计算边界 - 玩家中心的边界
+        const playerMinX = this.trackOffset + this.player.width / 2;
+        const playerMaxX = this.trackOffset + this.trackWidth - this.player.width / 2;
         
-        // 输入处理 - 基于当前位置判断是否可以移动，而不是基于车道
-        if (this.keys.left && this.player.x > minX) {
+        // 赛道实际边缘
+        const trackLeft = this.trackOffset;
+        const trackRight = this.trackOffset + this.trackWidth;
+        
+        // 输入处理
+        if (this.keys.left) {
             this.player.velocityX -= this.player.acceleration * this.gameSpeed;
         }
-        if (this.keys.right && this.player.x < maxX) {
+        if (this.keys.right) {
             this.player.velocityX += this.player.acceleration * this.gameSpeed;
         }
         
@@ -276,27 +287,34 @@ class CarGame {
         // 预测新位置
         const newX = this.player.x + this.player.velocityX;
         
-        // 边缘碰撞检测 - 如果玩家撞到赛道边缘
-        if (newX <= minX || newX >= maxX) {
-            // 检查是否已经在边缘并且还有速度向边缘
-            if ((newX <= minX && this.player.velocityX < -0.5) || 
-                (newX >= maxX && this.player.velocityX > 0.5)) {
-                // 撞到边缘 - 游戏结束
-                this.createCollisionParticles(this.player.x, this.player.y);
-                this.gameOver();
-                return;
-            }
+        // 计算玩家边缘位置
+        const playerLeftEdge = newX - this.player.width / 2;
+        const playerRightEdge = newX + this.player.width / 2;
+        
+        // 边缘碰撞检测 - 检查玩家是否会越界
+        // 如果玩家持续向边缘移动并且已经在边缘，游戏结束
+        const willHitLeftEdge = playerLeftEdge <= trackLeft && this.player.velocityX < 0;
+        const willHitRightEdge = playerRightEdge >= trackRight && this.player.velocityX > 0;
+        
+        // 更严格的检测：如果玩家已经在边缘并且还在向边缘移动
+        const alreadyAtLeft = this.player.x - this.player.width / 2 <= trackLeft + 1;
+        const alreadyAtRight = this.player.x + this.player.width / 2 >= trackRight - 1;
+        const stillMovingLeft = this.player.velocityX < -0.1 || this.keys.left;
+        const stillMovingRight = this.player.velocityX > 0.1 || this.keys.right;
+        
+        if ((alreadyAtLeft && stillMovingLeft) || (alreadyAtRight && stillMovingRight) ||
+            (willHitLeftEdge && Math.abs(this.player.velocityX) > 0.1) ||
+            (willHitRightEdge && Math.abs(this.player.velocityX) > 0.1)) {
+            // 撞到边缘 - 游戏结束
+            this.createCollisionParticles(this.player.x, this.player.y);
+            this.gameOver();
+            return;
         }
         
-        // 更新位置
-        this.player.x = Math.max(minX, Math.min(maxX, newX));
+        // 更新位置（限制在边界内）
+        this.player.x = Math.max(playerMinX, Math.min(playerMaxX, newX));
         
-        // 如果碰到边界，停止水平速度
-        if (this.player.x <= minX || this.player.x >= maxX) {
-            this.player.velocityX = 0;
-        }
-        
-        // 确定当前车道 - 无论速度如何，只要位置在新车道就更新
+        // 确定当前车道
         const relativeX = this.player.x - this.trackOffset;
         const newLane = Math.floor(relativeX / this.laneWidth);
         
@@ -315,40 +333,67 @@ class CarGame {
         if (this.obstacleSpawnTimer >= adjustedInterval / this.gameSpeed) {
             this.obstacleSpawnTimer = 0;
             
-            // 随机选择车道
-            const lane = Math.floor(Math.random() * this.lanes);
+            // 找出可用的车道（没有障碍物在生成区域的车道）
+            const availableLanes = [];
+            for (let i = 0; i < this.lanes; i++) {
+                // 检查该车道是否已有障碍物在生成区域（y < 200 或 z > 0.3）
+                const hasObstacleInLane = this.obstacles.some(obs => {
+                    const obsY = obs.visualY !== undefined ? obs.visualY : obs.y;
+                    return obs.lane === i && (obsY < 200 || obs.z > 0.3);
+                });
+                
+                // 检查该车道是否已有警告
+                const hasWarning = this.warningIndicators.some(w => w.lane === i);
+                
+                if (!hasObstacleInLane && !hasWarning) {
+                    availableLanes.push(i);
+                }
+            }
+            
+            // 如果没有可用车道，跳过这次生成
+            if (availableLanes.length === 0) {
+                return;
+            }
+            
+            // 从可用车道中随机选择
+            const lane = availableLanes[Math.floor(Math.random() * availableLanes.length)];
             
             // 随机选择障碍物类型
             const isCar = Math.random() > 0.4;
             
-            // 检查警告是否已存在
-            const hasWarning = this.warningIndicators.some(w => w.lane === lane);
-            
-            if (!hasWarning) {
-                // 添加警告指示器（非车辆障碍物）
-                if (!isCar) {
-                    this.warningIndicators.push({
-                        lane: lane,
-                        timer: 120, // 2秒警告
-                        alpha: 0
-                    });
-                }
+            // 添加警告指示器（非车辆障碍物）
+            if (!isCar) {
+                this.warningIndicators.push({
+                    lane: lane,
+                    timer: 120, // 2秒警告
+                    alpha: 0
+                });
             }
             
             // 创建障碍物（延迟生成，让警告显示一段时间）
             setTimeout(() => {
                 if (this.gameState === 'playing') {
-                    this.obstacles.push({
-                        x: this.trackOffset + this.laneWidth * lane + this.laneWidth / 2,
-                        y: -150,
-                        z: 1.0, // 伪3D深度（远景=1.0，近景=0）
-                        lane: lane,
-                        type: isCar ? 'car' : 'barrier',
-                        width: isCar ? 50 : 80,
-                        height: isCar ? 80 : 40,
-                        speed: this.speed * 0.8,
-                        color: isCar ? this.getRandomCarColor() : null
+                    // 再次检查该车道是否仍然可用（防止延迟期间有其他障碍物生成）
+                    const hasObstacleNow = this.obstacles.some(obs => {
+                        const obsY = obs.visualY !== undefined ? obs.visualY : obs.y;
+                        return obs.lane === lane && (obsY < 100 || obs.z > 0.5);
                     });
+                    
+                    if (!hasObstacleNow) {
+                        this.obstacles.push({
+                            x: this.trackOffset + this.laneWidth * lane + this.laneWidth / 2,
+                            y: -150,
+                            z: 1.0, // 伪3D深度（远景=1.0，近景=0）
+                            lane: lane,
+                            type: isCar ? 'car' : 'barrier',
+                            width: isCar ? 50 : 80,
+                            height: isCar ? 80 : 40,
+                            speed: this.speed * 0.8,
+                            color: isCar ? this.getRandomCarColor() : null,
+                            hasNearMiss: false,
+                            hasCollided: false
+                        });
+                    }
                 }
             }, isCar ? 0 : 800);
         }
@@ -371,9 +416,16 @@ class CarGame {
             // 伪3D效果：z值减小表示靠近
             obstacle.z -= 0.01 * this.gameSpeed * (this.speed / 100);
             
-            // 当z接近0时，障碍物到达屏幕底部
+            // 重要：根据z值计算视觉y位置
+            // 当z=1.0时，障碍物在屏幕上方远处；当z=0时，到达实际y位置
+            const visualStartY = -400; // 远景起始位置
+            const visualEndY = obstacle.y; // 近景目标位置
+            obstacle.visualY = visualStartY + (visualEndY - visualStartY) * (1 - obstacle.z);
+            
+            // 当z接近0时，障碍物开始在近景移动
             if (obstacle.z <= 0) {
                 obstacle.y += this.trackSpeed * this.gameSpeed * (this.speed / 50);
+                obstacle.visualY = obstacle.y;
             }
             
             // 移除超出屏幕的障碍物
@@ -396,41 +448,55 @@ class CarGame {
     }
     
     checkCollisions() {
-        // 玩家碰撞盒 - 轻微内缩，更准确的碰撞检测
+        // 玩家碰撞盒 - 几乎不内缩，确保视觉碰撞=检测碰撞
         const playerBounds = {
-            left: this.player.x - this.player.width / 2 + 3,
-            right: this.player.x + this.player.width / 2 - 3,
-            top: this.player.y - this.player.height / 2 + 3,
-            bottom: this.player.y + this.player.height / 2 - 3
+            left: this.player.x - this.player.width / 2 + 1,
+            right: this.player.x + this.player.width / 2 - 1,
+            top: this.player.y - this.player.height / 2 + 1,
+            bottom: this.player.y + this.player.height / 2 - 1
         };
         
         for (const obstacle of this.obstacles) {
-            // 只检测在屏幕内的障碍物 - 扩大检测范围
-            if (obstacle.y < -80 || obstacle.z > 0.3) continue;
+            // 使用visualY进行检测，扩大检测范围
+            const useVisualY = obstacle.visualY !== undefined ? obstacle.visualY : obstacle.y;
             
-            // 计算伪3D缩放
-            const scale = Math.max(0.5, 1 - obstacle.z * 0.5);
+            // 只检测在合理范围内的障碍物
+            if (useVisualY < -200 || useVisualY > this.canvas.height + 100) continue;
+            
+            // 计算伪3D缩放 - 根据z值或visualY位置
+            let scale;
+            if (obstacle.z > 0) {
+                scale = Math.max(0.4, 1 - obstacle.z * 0.6);
+            } else {
+                // 当z<=0时，根据距离玩家的距离微调缩放
+                const distanceToPlayer = this.player.y - useVisualY;
+                scale = Math.max(0.8, Math.min(1.2, 1 + (distanceToPlayer / 1000)));
+            }
+            
             const obsWidth = obstacle.width * scale;
             const obsHeight = obstacle.height * scale;
             
-            // 障碍物碰撞盒 - 轻微内缩
+            // 障碍物碰撞盒 - 几乎不内缩，使用visualY
             const obstacleBounds = {
-                left: obstacle.x - obsWidth / 2 + 2,
-                right: obstacle.x + obsWidth / 2 - 2,
-                top: obstacle.y - obsHeight / 2 + 2,
-                bottom: obstacle.y + obsHeight / 2 - 2
+                left: obstacle.x - obsWidth / 2,
+                right: obstacle.x + obsWidth / 2,
+                top: useVisualY - obsHeight / 2,
+                bottom: useVisualY + obsHeight / 2
             };
             
-            // 先检查是否会碰撞 - 用于擦边球逻辑
-            const willCollide = this.isColliding(playerBounds, obstacleBounds);
+            // 首先检测碰撞 - 使用实际碰撞盒
+            const isCollidingNow = this.isColliding(playerBounds, obstacleBounds);
             
             // 碰撞检测
-            if (willCollide) {
-                // 确保这个障碍物没有被标记为擦边球（如果碰撞了，取消擦边球）
+            if (isCollidingNow) {
+                // 标记障碍物已碰撞
+                obstacle.hasCollided = true;
+                
+                // 如果这个障碍物之前被错误标记为擦边球，撤销它
                 if (obstacle.hasNearMiss) {
-                    // 如果碰撞发生了，撤销擦边球的影响
                     this.nearMissCount = Math.max(0, this.nearMissCount - 1);
                     this.combo = Math.max(1, this.combo - 1);
+                    obstacle.hasNearMiss = false;
                 }
                 
                 // 创建碰撞粒子
@@ -439,27 +505,33 @@ class CarGame {
                 return;
             }
             
-            // 擦边球检测（极度接近但未碰撞）
-            // 使用实际的视觉尺寸来计算距离，而不是内缩后的碰撞盒
-            const visualPlayerBounds = {
-                left: this.player.x - this.player.width / 2,
-                right: this.player.x + this.player.width / 2,
-                top: this.player.y - this.player.height / 2,
-                bottom: this.player.y + this.player.height / 2
-            };
+            // 只有在确定没有碰撞时，才检测擦边球
+            // 只有当障碍物足够近时才检测（z较小或visualY接近玩家）
+            const isCloseEnough = obstacle.z < 0.2 || (useVisualY > this.player.y - 200);
             
-            const visualObstacleBounds = {
-                left: obstacle.x - obsWidth / 2,
-                right: obstacle.x + obsWidth / 2,
-                top: obstacle.y - obsHeight / 2,
-                bottom: obstacle.y + obsHeight / 2
-            };
-            
-            const nearMissDistance = this.calculateNearMiss(visualPlayerBounds, visualObstacleBounds);
-            
-            // 更严格的擦边球检测：距离必须在3-15像素之间，且障碍物必须足够近
-            if (nearMissDistance < 15 && nearMissDistance > 3 && obstacle.z < 0.15) {
-                if (!obstacle.hasNearMiss && !obstacle.hasCollided) {
+            if (isCloseEnough && !obstacle.hasNearMiss && !obstacle.hasCollided) {
+                // 使用视觉边界计算擦边球距离
+                const visualPlayerBounds = {
+                    left: this.player.x - this.player.width / 2,
+                    right: this.player.x + this.player.width / 2,
+                    top: this.player.y - this.player.height / 2,
+                    bottom: this.player.y + this.player.height / 2
+                };
+                
+                const visualObstacleBounds = {
+                    left: obstacle.x - obsWidth / 2,
+                    right: obstacle.x + obsWidth / 2,
+                    top: useVisualY - obsHeight / 2,
+                    bottom: useVisualY + obsHeight / 2
+                };
+                
+                const nearMissDistance = this.calculateNearMiss(visualPlayerBounds, visualObstacleBounds);
+                
+                // 严格的擦边球检测：距离必须在2-12像素之间
+                // 且障碍物必须在玩家附近（Y轴范围内）
+                const inYRange = useVisualY > this.player.y - 150 && useVisualY < this.player.y + 100;
+                
+                if (nearMissDistance < 12 && nearMissDistance > 2 && inYRange) {
                     obstacle.hasNearMiss = true;
                     this.triggerNearMiss();
                 }
@@ -498,7 +570,7 @@ class CarGame {
         this.scorePopups.push({
             x: this.player.x,
             y: this.player.y - 50,
-            text: '+' + bonusScore + ' 擦边球!',
+            text: '+' + bonusScore + ' 极限贴近!',
             timer: 60,
             isDouble: true
         });
