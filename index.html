@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>赛博朋克赛车避障游戏</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- HUD 显示 -->
+        <div id="hud">
+            <div id="score-display">
+                <div class="hud-label">得分</div>
+                <div class="hud-value" id="score">0</div>
+            </div>
+            <div id="speed-display">
+                <div class="hud-label">时速</div>
+                <div class="hud-value" id="speed">0</div>
+                <div class="hud-unit">KM/H</div>
+            </div>
+            <div id="combo-display" class="hidden">
+                <div class="hud-label">连击</div>
+                <div class="hud-value" id="combo">x1</div>
+            </div>
+        </div>
+
+        <!-- 侧边栏调节器 -->
+        <div id="sidebar">
+            <div class="sidebar-section">
+                <div class="sidebar-label">游戏速度</div>
+                <input type="range" id="game-speed" min="0.5" max="2" step="0.1" value="1">
+                <div class="slider-value" id="speed-value">1.0x</div>
+            </div>
+            <div class="sidebar-section">
+                <div class="sidebar-label">音量</div>
+                <input type="range" id="volume" min="0" max="100" step="1" value="70">
+                <div class="slider-value" id="volume-value">70%</div>
+            </div>
+            <div class="sidebar-section">
+                <div class="sidebar-label">粒子效果</div>
+                <input type="range" id="particles" min="0" max="100" step="10" value="80">
+                <div class="slider-value" id="particles-value">80%</div>
+            </div>
+        </div>
+
+        <!-- 开始界面 -->
+        <div id="start-screen" class="overlay">
+            <h1 class="game-title">赛博赛车</h1>
+            <p class="game-subtitle">CYBER RACER</p>
+            <div class="game-instructions">
+                <p>← → 左右方向键控制移动</p>
+                <p>躲避障碍物，收集分数</p>
+                <p>擦边球获得双倍积分！</p>
+            </div>
+            <button id="start-button" class="neon-button">开始游戏</button>
+        </div>
+
+        <!-- 游戏结束界面 -->
+        <div id="gameover-screen" class="overlay hidden">
+            <h1 class="game-title gameover">游戏结束</h1>
+            <p class="game-subtitle gameover">GAME OVER</p>
+            <div class="final-score">
+                <div class="final-label">最终得分</div>
+                <div class="final-value" id="final-score">0</div>
+            </div>
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-label">最高时速</div>
+                    <div class="stat-value" id="max-speed">0 KM/H</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">擦边球次数</div>
+                    <div class="stat-value" id="near-miss-count">0</div>
+                </div>
+            </div>
+            <button id="restart-button" class="neon-button">再来一局</button>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
