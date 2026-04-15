@@ -425,17 +425,53 @@ class CarGame {
         for (let i = this.obstacles.length - 1; i >= 0; i--) {
             const obstacle = this.obstacles[i];
             
-            // 简化设计：
-            // y值同时用于碰撞检测和渲染
-            // z值只控制缩放和透明度（伪3D效果）
-            // 这样碰撞和渲染完全同步
-            
             // Y位置持续移动
             obstacle.y += this.trackSpeed * this.gameSpeed * (this.speed / 60);
             
-            // z值减小表示靠近（影响缩放）
-            const zSpeed = 0.008 * this.gameSpeed * (this.speed / 100);
-            obstacle.z = Math.max(0, obstacle.z - zSpeed);
+            // 计算与玩家的相对距离（用于缩放）
+            // 玩家Y位置：this.player.y
+            // 当障碍物在玩家上方（y < player.y）：从远处接近玩家
+            // 当障碍物在玩家下方（y > player.y）：被玩家超越
+            
+            // 计算缩放因子（基于与玩家的相对距离）
+            // 1. 远景阶段：障碍物距离玩家很远（y < player.y - 400）：缩放0.3
+            // 2. 放大阶段：障碍物接近玩家（y从player.y - 400 到 player.y）：缩放从0.3增加到1.2
+            // 3. 峰值阶段：障碍物与玩家同一水平线（y ≈ player.y）：缩放1.2
+            // 4. 缩小阶段：障碍物被玩家超越（y > player.y）：缩放从1.2递减
+            
+            const distanceToPlayer = this.player.y - obstacle.y;
+            
+            // 计算缩放
+            let scale;
+            if (distanceToPlayer > 400) {
+                // 远景阶段
+                scale = 0.3;
+            } else if (distanceToPlayer >= 0) {
+                // 放大阶段：从0.3 -> 1.2
+                const progress = 1 - (distanceToPlayer / 400);
+                scale = 0.3 + progress * 0.9; // 0.3 + (0到0.9
+            } else {
+                // 缩小阶段：从1.2递减
+                const passedDistance = -distanceToPlayer;
+                // 超越后，缩放递减，超过500像素后降到0.8
+                scale = Math.max(0.8, 1.2 - (passedDistance / 500) * 0.4);
+            }
+            
+            obstacle.scale = Math.max(0.3, Math.min(1.2, scale));
+            
+            // 计算透明度（基于缩放和距离）
+            let alpha;
+            if (distanceToPlayer > 500) {
+                alpha = 0.4;
+            } else if (distanceToPlayer > 0) {
+                const progress = 1 - (distanceToPlayer / 500);
+                alpha = 0.4 + progress * 0.6;
+            } else {
+                // 被超越后，透明度保持较高
+                alpha = 1.0;
+            }
+            
+            obstacle.alpha = Math.max(0.3, Math.min(1.0, alpha));
             
             // 移除超出屏幕的障碍物
             if (obstacle.y > this.canvas.height + 200) {
@@ -471,10 +507,11 @@ class CarGame {
             
             // 扩大检测范围：检测玩家周围所有障碍物
             // 包括上方（接近玩家）和下方（刚通过玩家）
-            if (collisionY < this.player.y - 400 || collisionY > this.player.y + 200) continue;
+            if (collisionY < this.player.y - 500 || collisionY > this.player.y + 300) continue;
             
-            // 计算缩放（碰撞检测也使用相同的缩放，确保与渲染同步）
-            const scale = Math.max(0.5, 1 - obstacle.z * 0.5);
+            // 使用预计算的缩放（与渲染同步）
+            const scale = obstacle.scale !== undefined ? obstacle.scale : 
+                          Math.max(0.5, 1 - obstacle.z * 0.5);
             
             // 碰撞检测使用缩放后的尺寸（与渲染同步）
             const obsWidth = obstacle.width * scale;
@@ -510,8 +547,8 @@ class CarGame {
             }
             
             // 只有在确定没有碰撞时，才检测极限贴近
-            // 只有当障碍物足够近时才检测
-            const isCloseEnough = obstacle.z < 0.35 || (collisionY > this.player.y - 200);
+            // 只有当障碍物足够近时才检测（缩放 > 0.7 表示接近玩家）
+            const isCloseEnough = scale > 0.7 || (collisionY > this.player.y - 200);
             
             if (isCloseEnough && !obstacle.hasNearMiss && !obstacle.hasCollided) {
                 // 计算极限贴近距离
@@ -924,9 +961,11 @@ class CarGame {
         const ctx = this.ctx;
         
         for (const obstacle of this.obstacles) {
-            // 伪3D缩放计算
-            const scale = Math.max(0.3, 1 - obstacle.z * 0.7);
-            const alpha = Math.max(0.3, 1 - obstacle.z * 0.5);
+            // 使用预计算的缩放和透明度（基于与玩家的相对距离）
+            const scale = obstacle.scale !== undefined ? obstacle.scale : 
+                          Math.max(0.3, 1 - obstacle.z * 0.7);
+            const alpha = obstacle.alpha !== undefined ? obstacle.alpha : 
+                          Math.max(0.3, 1 - obstacle.z * 0.5);
             
             ctx.save();
             ctx.globalAlpha = alpha;
