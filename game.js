@@ -117,22 +117,8 @@ class CarGame {
     
     resizeCanvas() {
         if (this.isCompetitive) {
-            const container = this.canvas.parentElement;
-            let width = container.clientWidth;
-            let height = container.clientHeight;
-            
-            if (width < 100 || height < 100) {
-                const dualArea = document.querySelector('.dual-game-area');
-                if (dualArea) {
-                    width = Math.floor(dualArea.clientWidth / 2) - 15;
-                    height = dualArea.clientHeight;
-                }
-                if (width < 100) width = 400;
-                if (height < 100) height = 500;
-            }
-            
-            this.canvas.width = width;
-            this.canvas.height = height;
+            this.canvas.width = 800;
+            this.canvas.height = 600;
         } else {
             this.canvas.width = window.innerWidth;
             this.canvas.height = window.innerHeight;
@@ -1309,38 +1295,28 @@ class GameManager {
         document.getElementById('player-score').textContent = '0';
         document.getElementById('robot-score').textContent = '0';
         
-        setTimeout(() => {
-            this.playerGame = new CarGame({
-                canvasId: 'playerCanvas',
-                isCompetitive: true,
-                onGameOver: (stats) => this.handlePlayerGameOver(stats),
-                onScoreUpdate: (score) => {
-                    document.getElementById('player-score').textContent = score;
-                }
-            });
-            this.robotGame = new CarGame({
-                canvasId: 'robotCanvas',
-                isRobot: true,
-                robotLevel: this.robotLevel,
-                isCompetitive: true,
-                onGameOver: (stats) => this.handleRobotGameOver(stats),
-                onScoreUpdate: (score) => {
-                    document.getElementById('robot-score').textContent = score;
-                }
-            });
-            
-            setTimeout(() => {
-                if (this.playerGame) {
-                    this.playerGame.resizeCanvas();
-                }
-                if (this.robotGame) {
-                    this.robotGame.resizeCanvas();
-                }
-                this.playerGame.startGame();
-                this.robotGame.startGame();
-                this.competitiveGameLoop();
-            }, 100);
-        }, 200);
+        this.playerGame = new CarGame({
+            canvasId: 'playerCanvas',
+            isCompetitive: true,
+            onGameOver: (stats) => this.handlePlayerGameOver(stats),
+            onScoreUpdate: (score) => {
+                document.getElementById('player-score').textContent = score;
+            }
+        });
+        this.robotGame = new CarGame({
+            canvasId: 'robotCanvas',
+            isRobot: true,
+            robotLevel: this.robotLevel,
+            isCompetitive: true,
+            onGameOver: (stats) => this.handleRobotGameOver(stats),
+            onScoreUpdate: (score) => {
+                document.getElementById('robot-score').textContent = score;
+            }
+        });
+        
+        this.playerGame.startGame();
+        this.robotGame.startGame();
+        this.competitiveGameLoop();
     }
     
     handlePlayerGameOver(stats) {
