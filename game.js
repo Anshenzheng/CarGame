@@ -367,8 +367,24 @@ class CarGame {
         const trackLeft = this.trackOffset;
         const trackRight = this.trackOffset + this.trackWidth;
         
-        if (this.keys.left) this.player.velocityX -= this.player.acceleration * this.gameSpeed;
-        if (this.keys.right) this.player.velocityX += this.player.acceleration * this.gameSpeed;
+        if (this.isRobot) {
+            const targetX = this.player.targetX;
+            const currentX = this.player.x;
+            const distance = targetX - currentX;
+            
+            if (Math.abs(distance) > 5) {
+                if (distance > 0) {
+                    this.player.velocityX += this.player.acceleration * this.gameSpeed;
+                } else {
+                    this.player.velocityX -= this.player.acceleration * this.gameSpeed;
+                }
+            } else {
+                this.player.velocityX *= 0.8;
+            }
+        } else {
+            if (this.keys.left) this.player.velocityX -= this.player.acceleration * this.gameSpeed;
+            if (this.keys.right) this.player.velocityX += this.player.acceleration * this.gameSpeed;
+        }
         
         this.player.velocityX = Math.max(-this.player.maxVelocity, 
             Math.min(this.player.maxVelocity, this.player.velocityX));
