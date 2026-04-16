@@ -7,10 +7,50 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="game-container">
+    <!-- 主菜单 -->
+    <div id="main-menu" class="overlay">
+        <h1 class="game-title">赛博赛车</h1>
+        <p class="game-subtitle">CYBER RACER</p>
+        <div class="mode-selection">
+            <button id="single-mode-btn" class="neon-button mode-btn">单人模式</button>
+            <button id="competitive-mode-btn" class="neon-button mode-btn">竞技模式</button>
+        </div>
+        <div class="game-instructions">
+            <p>← → 左右方向键控制移动</p>
+            <p>躲避障碍物，收集分数</p>
+            <p>极限贴近获得双倍积分！</p>
+        </div>
+    </div>
+
+    <!-- 机器人等级选择 -->
+    <div id="robot-selection" class="overlay hidden">
+        <h1 class="game-title">选择对手</h1>
+        <p class="game-subtitle">SELECT OPPONENT</p>
+        <div class="robot-levels">
+            <button class="robot-level-btn" data-level="rookie">
+                <span class="level-name">菜鸟司机</span>
+                <span class="level-desc">反应慢，经常失误</span>
+            </button>
+            <button class="robot-level-btn" data-level="normal">
+                <span class="level-name">一般司机</span>
+                <span class="level-desc">普通驾驶水平</span>
+            </button>
+            <button class="robot-level-btn" data-level="veteran">
+                <span class="level-name">老司机</span>
+                <span class="level-desc">经验丰富，反应快</span>
+            </button>
+            <button class="robot-level-btn" data-level="master">
+                <span class="level-name">车神</span>
+                <span class="level-desc">完美驾驶，无懈可击</span>
+            </button>
+        </div>
+        <button id="back-to-menu-btn" class="neon-button back-btn">返回主菜单</button>
+    </div>
+
+    <!-- 单人游戏容器 -->
+    <div id="single-game-container" class="game-container hidden">
         <canvas id="gameCanvas"></canvas>
         
-        <!-- HUD 显示 -->
         <div id="hud">
             <div id="score-display">
                 <div class="hud-label">得分</div>
@@ -27,7 +67,6 @@
             </div>
         </div>
 
-        <!-- 侧边栏调节器 -->
         <div id="sidebar">
             <div class="sidebar-section">
                 <div class="sidebar-label">游戏速度</div>
@@ -44,21 +83,15 @@
                 <input type="range" id="particles" min="0" max="100" step="10" value="80">
                 <div class="slider-value" id="particles-value">80%</div>
             </div>
+            <button id="single-menu-btn" class="neon-button small-btn">返回菜单</button>
         </div>
 
-        <!-- 开始界面 -->
-        <div id="start-screen" class="overlay">
+        <div id="start-screen" class="overlay hidden">
             <h1 class="game-title">赛博赛车</h1>
             <p class="game-subtitle">CYBER RACER</p>
-            <div class="game-instructions">
-                <p>← → 左右方向键控制移动</p>
-                <p>躲避障碍物，收集分数</p>
-                <p>极限贴近获得双倍积分！</p>
-            </div>
             <button id="start-button" class="neon-button">开始游戏</button>
         </div>
 
-        <!-- 游戏结束界面 -->
         <div id="gameover-screen" class="overlay hidden">
             <h1 class="game-title gameover">游戏结束</h1>
             <p class="game-subtitle gameover">GAME OVER</p>
@@ -76,8 +109,66 @@
                     <div class="stat-value" id="near-miss-count">0</div>
                 </div>
             </div>
-            <button id="restart-button" class="neon-button">再来一局</button>
+            <div class="gameover-buttons">
+                <button id="restart-button" class="neon-button">再来一局</button>
+                <button id="gameover-menu-btn" class="neon-button">返回菜单</button>
+            </div>
         </div>
+    </div>
+
+    <!-- 竞技模式容器 -->
+    <div id="competitive-game-container" class="game-container hidden">
+        <div class="versus-header">
+            <div class="player-header">
+                <div class="player-label">玩家</div>
+                <div class="player-score" id="player-score">0</div>
+            </div>
+            <div class="vs-text">VS</div>
+            <div class="robot-header">
+                <div class="player-label" id="robot-label">机器人</div>
+                <div class="player-score" id="robot-score">0</div>
+            </div>
+        </div>
+
+        <div class="dual-game-area">
+            <div class="game-panel player-panel">
+                <canvas id="playerCanvas"></canvas>
+                <div class="panel-overlay" id="player-status">
+                    <span class="status-text">比赛中</span>
+                </div>
+            </div>
+            <div class="game-panel robot-panel">
+                <canvas id="robotCanvas"></canvas>
+                <div class="panel-overlay" id="robot-status">
+                    <span class="status-text">比赛中</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="competitive-gameover" class="overlay hidden">
+            <h1 class="game-title" id="winner-title">游戏结束</h1>
+            <p class="game-subtitle" id="winner-subtitle">GAME OVER</p>
+            <div class="competitive-result">
+                <div class="result-column">
+                    <div class="result-label">玩家</div>
+                    <div class="result-score" id="player-final-score">0</div>
+                </div>
+                <div class="result-divider">:</div>
+                <div class="result-column">
+                    <div class="result-label" id="robot-final-label">机器人</div>
+                    <div class="result-score" id="robot-final-score">0</div>
+                </div>
+            </div>
+            <div class="winner-announcement" id="winner-announcement">
+                玩家获胜！
+            </div>
+            <div class="gameover-buttons">
+                <button id="competitive-restart-btn" class="neon-button">再来一局</button>
+                <button id="competitive-menu-btn" class="neon-button">返回菜单</button>
+            </div>
+        </div>
+
+        <button id="competitive-back-btn" class="neon-button small-btn competitive-back">返回菜单</button>
     </div>
 
     <script src="game.js"></script>
