@@ -10,7 +10,7 @@ body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-#game-container {
+.game-container {
     position: relative;
     width: 100vw;
     height: 100vh;
@@ -174,6 +174,11 @@ input[type="range"]::-webkit-slider-thumb:hover {
     text-shadow: 0 0 20px #ff0033, 0 0 40px #ff0033;
 }
 
+.game-title.winner {
+    color: #00ff00;
+    text-shadow: 0 0 20px #00ff00, 0 0 40px #00ff00;
+}
+
 .game-subtitle {
     font-size: 24px;
     color: #ff00ff;
@@ -245,6 +250,12 @@ input[type="range"]::-webkit-slider-thumb:hover {
     text-shadow: 0 0 10px #ff00ff;
 }
 
+.gameover-buttons {
+    display: flex;
+    gap: 20px;
+    margin-top: 20px;
+}
+
 /* 霓虹按钮样式 */
 .neon-button {
     padding: 15px 50px;
@@ -274,6 +285,252 @@ input[type="range"]::-webkit-slider-thumb:hover {
     transform: scale(0.98);
 }
 
+.neon-button.small-btn {
+    padding: 10px 25px;
+    font-size: 14px;
+    margin-top: 15px;
+}
+
+/* 模式选择 */
+.mode-selection {
+    display: flex;
+    gap: 30px;
+    margin-bottom: 40px;
+}
+
+.mode-btn {
+    min-width: 180px;
+}
+
+/* 机器人等级选择 */
+.robot-levels {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    margin-bottom: 40px;
+    max-width: 600px;
+}
+
+.robot-level-btn {
+    padding: 25px 30px;
+    background: rgba(10, 10, 20, 0.8);
+    border: 2px solid rgba(0, 255, 255, 0.3);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-align: left;
+}
+
+.robot-level-btn:hover {
+    border-color: #00ffff;
+    box-shadow: 0 0 30px rgba(0, 255, 255, 0.5);
+    transform: scale(1.02);
+}
+
+.robot-level-btn[data-level="rookie"]:hover {
+    border-color: #88ff88;
+    box-shadow: 0 0 30px rgba(136, 255, 136, 0.5);
+}
+
+.robot-level-btn[data-level="normal"]:hover {
+    border-color: #88ffff;
+    box-shadow: 0 0 30px rgba(136, 255, 255, 0.5);
+}
+
+.robot-level-btn[data-level="veteran"]:hover {
+    border-color: #ffaa00;
+    box-shadow: 0 0 30px rgba(255, 170, 0, 0.5);
+}
+
+.robot-level-btn[data-level="master"]:hover {
+    border-color: #ff00ff;
+    box-shadow: 0 0 30px rgba(255, 0, 255, 0.5);
+}
+
+.level-name {
+    display: block;
+    font-size: 20px;
+    font-weight: bold;
+    color: #ffffff;
+    margin-bottom: 8px;
+}
+
+.level-desc {
+    display: block;
+    font-size: 12px;
+    color: #888888;
+}
+
+.back-btn {
+    border-color: #666666;
+    color: #aaaaaa;
+    text-shadow: none;
+    box-shadow: none;
+}
+
+.back-btn:hover {
+    border-color: #888888;
+    background: rgba(100, 100, 100, 0.2);
+    box-shadow: none;
+}
+
+/* 竞技模式头部 */
+.versus-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 80px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: rgba(10, 10, 20, 0.9);
+    z-index: 50;
+    border-bottom: 2px solid rgba(0, 255, 255, 0.3);
+}
+
+.player-header, .robot-header {
+    text-align: center;
+    padding: 0 40px;
+}
+
+.player-label {
+    font-size: 14px;
+    color: #00ffff;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 5px;
+}
+
+.player-score {
+    font-size: 36px;
+    font-weight: bold;
+    color: #ffffff;
+    font-family: 'Courier New', monospace;
+    text-shadow: 0 0 15px #ff00ff;
+}
+
+.vs-text {
+    font-size: 28px;
+    font-weight: bold;
+    color: #ff00ff;
+    text-shadow: 0 0 20px #ff00ff;
+    padding: 0 30px;
+}
+
+/* 双游戏区域 */
+.dual-game-area {
+    position: absolute;
+    top: 80px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    gap: 10px;
+    padding: 10px;
+}
+
+.game-panel {
+    flex: 1;
+    position: relative;
+    border: 2px solid rgba(0, 255, 255, 0.3);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.player-panel {
+    border-color: rgba(0, 255, 255, 0.5);
+}
+
+.robot-panel {
+    border-color: rgba(255, 0, 255, 0.5);
+}
+
+.game-panel canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.panel-overlay {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.7);
+    padding: 5px 15px;
+    border-radius: 5px;
+    z-index: 10;
+}
+
+.status-text {
+    font-size: 12px;
+    color: #00ff00;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.panel-overlay.crashed .status-text {
+    color: #ff0000;
+}
+
+/* 竞技模式结果 */
+.competitive-result {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 30px;
+    margin: 30px 0;
+}
+
+.result-column {
+    text-align: center;
+}
+
+.result-label {
+    font-size: 18px;
+    color: #00ffff;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 10px;
+}
+
+.result-score {
+    font-size: 56px;
+    font-weight: bold;
+    color: #ffffff;
+    font-family: 'Courier New', monospace;
+    text-shadow: 0 0 20px #ff00ff;
+}
+
+.result-divider {
+    font-size: 48px;
+    color: #ff00ff;
+    font-weight: bold;
+}
+
+.winner-announcement {
+    font-size: 28px;
+    color: #00ff00;
+    font-weight: bold;
+    text-shadow: 0 0 20px #00ff00;
+    margin: 20px 0;
+    animation: winnerPulse 1s ease-in-out infinite;
+}
+
+.winner-announcement.draw {
+    color: #ffff00;
+    text-shadow: 0 0 20px #ffff00;
+}
+
+.competitive-back {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 60;
+}
+
 /* 动画效果 */
 @keyframes neonPulse {
     0%, 100% {
@@ -284,9 +541,15 @@ input[type="range"]::-webkit-slider-thumb:hover {
     }
 }
 
-/* 碰撞震动效果 */
-.shake {
-    animation: shake 0.5s ease-in-out;
+@keyframes winnerPulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.05);
+        opacity: 0.9;
+    }
 }
 
 @keyframes shake {
@@ -295,18 +558,20 @@ input[type="range"]::-webkit-slider-thumb:hover {
     20%, 40%, 60%, 80% { transform: translateX(5px); }
 }
 
-/* 擦边球抖动效果 */
-.near-miss-shake {
-    animation: nearMissShake 0.3s ease-in-out;
-}
-
 @keyframes nearMissShake {
     0%, 100% { transform: translateX(0); }
     25% { transform: translateX(-3px); }
     75% { transform: translateX(3px); }
 }
 
-/* 黑白效果 */
+.shake {
+    animation: shake 0.5s ease-in-out;
+}
+
+.near-miss-shake {
+    animation: nearMissShake 0.3s ease-in-out;
+}
+
 .grayscale {
     filter: grayscale(100%) contrast(1.2);
 }
