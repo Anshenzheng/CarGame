@@ -155,6 +155,10 @@ input[type="range"]::-webkit-slider-thumb:hover {
     z-index: 100;
 }
 
+.hidden {
+    display: none !important;
+}
+
 .overlay.hidden {
     display: none;
 }
