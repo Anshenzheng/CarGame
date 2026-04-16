@@ -118,12 +118,26 @@ class CarGame {
     resizeCanvas() {
         if (this.isCompetitive) {
             const container = this.canvas.parentElement;
-            this.canvas.width = container.clientWidth;
-            this.canvas.height = container.clientHeight;
+            let width = container.clientWidth;
+            let height = container.clientHeight;
+            
+            if (width < 100 || height < 100) {
+                const dualArea = document.querySelector('.dual-game-area');
+                if (dualArea) {
+                    width = Math.floor(dualArea.clientWidth / 2) - 15;
+                    height = dualArea.clientHeight;
+                }
+                if (width < 100) width = 400;
+                if (height < 100) height = 500;
+            }
+            
+            this.canvas.width = width;
+            this.canvas.height = height;
         } else {
             this.canvas.width = window.innerWidth;
             this.canvas.height = window.innerHeight;
         }
+        
         const oldTrackOffset = this.trackOffset;
         this.trackOffset = (this.canvas.width - this.trackWidth) / 2;
         const offsetDelta = this.trackOffset - oldTrackOffset;
@@ -1314,10 +1328,19 @@ class GameManager {
                     document.getElementById('robot-score').textContent = score;
                 }
             });
-            this.playerGame.startGame();
-            this.robotGame.startGame();
-            this.competitiveGameLoop();
-        }, 100);
+            
+            setTimeout(() => {
+                if (this.playerGame) {
+                    this.playerGame.resizeCanvas();
+                }
+                if (this.robotGame) {
+                    this.robotGame.resizeCanvas();
+                }
+                this.playerGame.startGame();
+                this.robotGame.startGame();
+                this.competitiveGameLoop();
+            }, 100);
+        }, 200);
     }
     
     handlePlayerGameOver(stats) {
