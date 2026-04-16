@@ -1,51 +1,60 @@
 const RobotLevels = {
     rookie: {
         name: '菜鸟司机',
-        reactionTime: 250,
-        decisionAccuracy: 0.4,
-        pathPlanning: 0.2,
-        nearMissChance: 0.05,
-        mistakeChance: 0.25,
-        maxSpeedMultiplier: 0.6,
-        observationRange: 300,
-        safeDistance: 120,
-        canPlanAhead: false
+        reactionTime: 350,
+        decisionAccuracy: 0.35,
+        pathPlanning: 0.15,
+        nearMissChance: 0.02,
+        mistakeChance: 0.35,
+        maxSpeedMultiplier: 0.55,
+        observationRange: 250,
+        safeDistance: 150,
+        canPlanAhead: false,
+        aggressiveDriving: false,
+        panicChance: 0.15
     },
     normal: {
         name: '一般司机',
-        reactionTime: 150,
-        decisionAccuracy: 0.65,
-        pathPlanning: 0.5,
-        nearMissChance: 0.15,
-        mistakeChance: 0.1,
+        reactionTime: 180,
+        decisionAccuracy: 0.7,
+        pathPlanning: 0.55,
+        nearMissChance: 0.1,
+        mistakeChance: 0.12,
         maxSpeedMultiplier: 0.8,
         observationRange: 400,
-        safeDistance: 100,
-        canPlanAhead: true
+        safeDistance: 110,
+        canPlanAhead: true,
+        aggressiveDriving: false,
+        panicChance: 0.05
     },
     veteran: {
         name: '老司机',
-        reactionTime: 80,
-        decisionAccuracy: 0.9,
-        pathPlanning: 0.85,
-        nearMissChance: 0.3,
-        mistakeChance: 0.03,
+        reactionTime: 60,
+        decisionAccuracy: 0.92,
+        pathPlanning: 0.88,
+        nearMissChance: 0.25,
+        mistakeChance: 0.015,
         maxSpeedMultiplier: 1.0,
-        observationRange: 500,
-        safeDistance: 80,
-        canPlanAhead: true
+        observationRange: 550,
+        safeDistance: 90,
+        canPlanAhead: true,
+        aggressiveDriving: true,
+        panicChance: 0.01
     },
     master: {
         name: '车神',
         reactionTime: 0,
         decisionAccuracy: 1.0,
         pathPlanning: 1.0,
-        nearMissChance: 0.45,
+        nearMissChance: 0.5,
         mistakeChance: 0,
-        maxSpeedMultiplier: 1.15,
-        observationRange: 600,
-        safeDistance: 60,
-        canPlanAhead: true
+        maxSpeedMultiplier: 1.1,
+        observationRange: 700,
+        safeDistance: 75,
+        canPlanAhead: true,
+        aggressiveDriving: true,
+        panicChance: 0,
+        precisionDriving: true
     }
 };
 
@@ -117,7 +126,18 @@ class CarGame {
             decisionTimer: 0,
             targetLane: 1,
             isMistaking: false,
-            mistakeTimer: 0
+            mistakeTimer: 0,
+            isChangingLane: false,
+            changeLaneStartLane: -1,
+            changeLaneTargetLane: -1,
+            lastSituation: null,
+            pendingDecision: null,
+            decisionStartTime: 0,
+            nearMissActive: false,
+            nearMissTargetLane: -1,
+            nearMissObstacle: null,
+            aggressiveDriving: false,
+            lastObstacleCount: 0
         };
         this.aiTargetLane = 1;
     }
@@ -227,69 +247,489 @@ class CarGame {
     updateRobotAI() {
         const ai = this.aiConfig;
         
-        if (ai.isMistaking) {
-            ai.mistakeTimer--;
-            if (ai.mistakeTimer <= 0) ai.isMistaking = false;
-            return;
-        }
-        
-        if (Math.random() < ai.mistakeChance * 0.005) {
-            ai.isMistaking = true;
-            ai.mistakeTimer = Math.floor(Math.random() * 40) + 20;
-            const wrongDirection = Math.random() > 0.5;
-            const targetLane = wrongDirection ? 
-                Math.max(0, this.player.lane - 1) : 
-                Math.min(this.lanes - 1, this.player.lane + 1);
-            this.aiTargetLane = targetLane;
-            return;
-        }
-        
-        const situation = this.analyzeSituation();
-        
-        const needsChange = this.needsLaneChange(situation);
-        
-        if (needsChange) {
-            ai.reactionTimer++;
-            const reactionFrames = ai.reactionTime / 16.67;
-            
-            if (ai.reactionTimer >= reactionFrames) {
-                const bestLane = this.chooseBestLaneAdvanced(situation);
-                
-                if (bestLane !== this.player.lane && this.isLaneSafeForChange(bestLane, situation)) {
-                    if (Math.random() < ai.decisionAccuracy) {
-                        this.aiTargetLane = bestLane;
-                    } else {
-                        const safeLanes = situation.safeLanes.filter(l => l !== this.player.lane);
-                        if (safeLanes.length > 0) {
-                            const randomLane = safeLanes[Math.floor(Math.random() * safeLanes.length)];
-                            if (this.isLaneSafeForChange(randomLane, situation)) {
-                                this.aiTargetLane = randomLane;
-                            }
-                        }
-                    }
-                }
-                ai.reactionTimer = 0;
-            }
-        } else {
-            ai.reactionTimer = 0;
-            
-            if (ai.nearMissChance > 0 && situation.hasNearByObstacles && Math.random() < ai.nearMissChance * 0.01) {
-                this.attemptNearMissAdvanced(situation);
-            }
-        }
-        
-        this.executeLaneChange();
-    }
-    
-    executeLaneChange() {
         if (this.aiTargetLane === undefined) {
             this.aiTargetLane = this.player.lane;
         }
         
-        if (this.aiTargetLane !== this.player.lane) {
-            this.player.lane = this.aiTargetLane;
+        if (ai.isChangingLane) {
+            this.handleLaneChangeProgress();
+            return;
+        }
+        
+        if (ai.nearMissActive) {
+            this.handleNearMissProgress();
+            return;
+        }
+        
+        if (ai.isMistaking) {
+            ai.mistakeTimer--;
+            if (ai.mistakeTimer <= 0) {
+                ai.isMistaking = false;
+            }
+            this.executeMistakeBehavior();
+            return;
+        }
+        
+        const situation = this.analyzeSituationAdvanced();
+        ai.lastSituation = situation;
+        
+        const shouldTriggerMistake = this.shouldTriggerMistake(situation);
+        if (shouldTriggerMistake) {
+            this.triggerMistake(situation);
+            return;
+        }
+        
+        const decision = this.makeDecision(situation);
+        
+        if (decision.needsAction) {
+            if (ai.reactionTimer === 0) {
+                ai.reactionTimer = 1;
+                ai.decisionStartTime = this.time;
+                ai.pendingDecision = decision;
+            } else {
+                ai.reactionTimer++;
+                const reactionFrames = ai.reactionTime / 16.67;
+                
+                if (ai.reactionTimer >= reactionFrames) {
+                    this.executeDecision(ai.pendingDecision || decision, situation);
+                    ai.reactionTimer = 0;
+                    ai.pendingDecision = null;
+                }
+            }
+        } else {
+            ai.reactionTimer = 0;
+            ai.pendingDecision = null;
+            
+            if (ai.nearMissChance > 0 && situation.hasNearByObstacles) {
+                this.considerNearMiss(situation);
+            }
+            
+            if (this.aiTargetLane !== this.player.lane) {
+                this.returnToCenterLane();
+            }
+        }
+    }
+    
+    handleLaneChangeProgress() {
+        const ai = this.aiConfig;
+        const targetX = this.trackOffset + this.laneWidth * ai.changeLaneTargetLane + this.laneWidth / 2;
+        const distance = Math.abs(this.player.x - targetX);
+        
+        if (distance < 10) {
+            ai.isChangingLane = false;
+            ai.changeLaneStartLane = -1;
+            ai.changeLaneTargetLane = -1;
+            this.player.lane = ai.changeLaneTargetLane;
+            this.aiTargetLane = ai.changeLaneTargetLane;
             this.updatePlayerPosition();
         }
+    }
+    
+    handleNearMissProgress() {
+        const ai = this.aiConfig;
+        
+        if (!ai.nearMissObstacle || ai.nearMissObstacle.hasCollided) {
+            ai.nearMissActive = false;
+            ai.nearMissTargetLane = -1;
+            ai.nearMissObstacle = null;
+            this.aiTargetLane = this.player.lane;
+            return;
+        }
+        
+        const obsY = ai.nearMissObstacle.visualY !== undefined ? ai.nearMissObstacle.visualY : ai.nearMissObstacle.y;
+        const playerY = this.player.y;
+        
+        if (obsY > playerY + 50) {
+            ai.nearMissActive = false;
+            ai.nearMissTargetLane = -1;
+            ai.nearMissObstacle = null;
+            this.aiTargetLane = this.player.lane;
+            return;
+        }
+        
+        const targetX = this.trackOffset + this.laneWidth * ai.nearMissTargetLane + this.laneWidth / 2;
+        const distance = Math.abs(this.player.x - targetX);
+        
+        if (distance < 10) {
+            this.player.lane = ai.nearMissTargetLane;
+            this.updatePlayerPosition();
+        }
+    }
+    
+    executeMistakeBehavior() {
+        const ai = this.aiConfig;
+        
+        if (ai.mistakeType === 'wrongDirection') {
+            const targetX = this.trackOffset + this.laneWidth * this.aiTargetLane + this.laneWidth / 2;
+            const distance = Math.abs(this.player.x - targetX);
+            if (distance < 10) {
+                this.player.lane = this.aiTargetLane;
+                this.updatePlayerPosition();
+            }
+        } else if (ai.mistakeType === 'noAction') {
+        } else if (ai.mistakeType === 'overshoot') {
+            const targetX = this.trackOffset + this.laneWidth * this.aiTargetLane + this.laneWidth / 2;
+            const distance = Math.abs(this.player.x - targetX);
+            if (distance < 10) {
+                this.player.lane = this.aiTargetLane;
+                this.updatePlayerPosition();
+            }
+        }
+    }
+    
+    shouldTriggerMistake(situation) {
+        const ai = this.aiConfig;
+        
+        if (ai.mistakeChance <= 0) return false;
+        
+        let baseChance = ai.mistakeChance * 0.02;
+        
+        if (situation.immediateDanger) {
+            baseChance *= 1.5;
+        }
+        
+        if (situation.hasNearByObstacles) {
+            baseChance *= 1.2;
+        }
+        
+        if (situation.complexSituation) {
+            baseChance *= 2;
+        }
+        
+        return Math.random() < baseChance;
+    }
+    
+    triggerMistake(situation) {
+        const ai = this.aiConfig;
+        
+        const mistakeTypes = ['wrongDirection', 'noAction', 'overshoot', 'slowReaction'];
+        const weights = [0.35, 0.25, 0.2, 0.2];
+        
+        let random = Math.random();
+        let selectedType = mistakeTypes[0];
+        let cumulative = 0;
+        
+        for (let i = 0; i < mistakeTypes.length; i++) {
+            cumulative += weights[i];
+            if (random < cumulative) {
+                selectedType = mistakeTypes[i];
+                break;
+            }
+        }
+        
+        ai.isMistaking = true;
+        ai.mistakeType = selectedType;
+        ai.mistakeTimer = Math.floor(Math.random() * 30) + 15;
+        
+        if (selectedType === 'wrongDirection') {
+            const wrongDirection = Math.random() > 0.5;
+            let targetLane;
+            
+            if (situation.immediateDanger) {
+                const safeLanes = situation.safeLanes.filter(l => l !== this.player.lane);
+                if (safeLanes.length > 0) {
+                    const bestLane = situation.safeLanes[0];
+                    targetLane = wrongDirection ? 
+                        (bestLane > this.player.lane ? this.player.lane - 1 : this.player.lane + 1) :
+                        bestLane;
+                } else {
+                    targetLane = wrongDirection ? 
+                        Math.max(0, this.player.lane - 1) : 
+                        Math.min(this.lanes - 1, this.player.lane + 1);
+                }
+            } else {
+                targetLane = wrongDirection ? 
+                    Math.max(0, this.player.lane - 1) : 
+                    Math.min(this.lanes - 1, this.player.lane + 1);
+            }
+            
+            targetLane = Math.max(0, Math.min(this.lanes - 1, targetLane));
+            this.aiTargetLane = targetLane;
+            
+        } else if (selectedType === 'overshoot') {
+            const direction = Math.random() > 0.5 ? 1 : -1;
+            let targetLane = this.player.lane + direction * 2;
+            targetLane = Math.max(0, Math.min(this.lanes - 1, targetLane));
+            
+            if (targetLane !== this.player.lane) {
+                this.aiTargetLane = targetLane;
+            } else {
+                ai.mistakeType = 'noAction';
+            }
+        }
+    }
+    
+    makeDecision(situation) {
+        const ai = this.aiConfig;
+        
+        let decision = {
+            needsAction: false,
+            actionType: 'none',
+            targetLane: this.player.lane,
+            reason: ''
+        };
+        
+        if (situation.immediateDanger) {
+            const currentLane = this.player.lane;
+            
+            if (ai.panicChance && ai.panicChance > 0 && Math.random() < ai.panicChance) {
+                decision.needsAction = true;
+                decision.actionType = 'panic';
+                decision.reason = 'panic';
+                
+                const randomDirection = Math.random() > 0.5;
+                let panicTarget;
+                if (randomDirection && currentLane > 0) {
+                    panicTarget = currentLane - 1;
+                } else if (!randomDirection && currentLane < this.lanes - 1) {
+                    panicTarget = currentLane + 1;
+                } else {
+                    panicTarget = currentLane;
+                }
+                decision.targetLane = panicTarget;
+                return decision;
+            }
+            
+            decision.needsAction = true;
+            decision.actionType = 'emergencyAvoid';
+            decision.reason = 'immediateDanger';
+            
+            const possibleLanes = [];
+            
+            if (currentLane > 0) {
+                const leftSafe = this.isLaneSafeForChangeAdvanced(currentLane - 1, situation, 'left');
+                if (leftSafe) {
+                    possibleLanes.push({ lane: currentLane - 1, score: situation.laneScores[currentLane - 1] });
+                }
+            }
+            
+            if (currentLane < this.lanes - 1) {
+                const rightSafe = this.isLaneSafeForChangeAdvanced(currentLane + 1, situation, 'right');
+                if (rightSafe) {
+                    possibleLanes.push({ lane: currentLane + 1, score: situation.laneScores[currentLane + 1] });
+                }
+            }
+            
+            if (possibleLanes.length > 0) {
+                possibleLanes.sort((a, b) => b.score - a.score);
+                decision.targetLane = possibleLanes[0].lane;
+            } else {
+                decision.targetLane = currentLane;
+                decision.actionType = 'none';
+                decision.needsAction = false;
+            }
+            
+            return decision;
+        }
+        
+        if (!ai.canPlanAhead) {
+            return decision;
+        }
+        
+        if (situation.nearDanger) {
+            const currentScore = situation.laneScores[this.player.lane];
+            const scoreThreshold = ai.pathPlanning > 0.7 ? 15 : 25;
+            const hasBetterLane = situation.safeLanes.some(lane => {
+                return lane !== this.player.lane && situation.laneScores[lane] > currentScore + scoreThreshold;
+            });
+            
+            if (hasBetterLane) {
+                decision.needsAction = true;
+                decision.actionType = 'avoidance';
+                decision.reason = 'nearDanger';
+                
+                const bestLane = situation.safeLanes.find(lane => {
+                    if (lane === this.player.lane) return false;
+                    const dist = Math.abs(lane - this.player.lane);
+                    return dist <= 1 && this.isLaneSafeForChangeAdvanced(lane, situation, 
+                        lane > this.player.lane ? 'right' : 'left');
+                });
+                
+                if (bestLane !== undefined) {
+                    decision.targetLane = bestLane;
+                } else {
+                    decision.needsAction = false;
+                    decision.actionType = 'none';
+                }
+            }
+        }
+        
+        if (ai.pathPlanning > 0.6 && !decision.needsAction) {
+            const currentScore = situation.laneScores[this.player.lane];
+            const planningThreshold = ai.pathPlanning > 0.85 ? 25 : 35;
+            const hasMuchBetterLane = situation.safeLanes.some(lane => {
+                return lane !== this.player.lane && situation.laneScores[lane] > currentScore + planningThreshold;
+            });
+            
+            if (hasMuchBetterLane) {
+                const bestOption = situation.safeLanes.find(lane => {
+                    if (lane === this.player.lane) return false;
+                    const dist = Math.abs(lane - this.player.lane);
+                    return dist <= 1 && 
+                           situation.laneScores[lane] > currentScore + planningThreshold &&
+                           this.isLaneSafeForChangeAdvanced(lane, situation,
+                               lane > this.player.lane ? 'right' : 'left');
+                });
+                
+                if (bestOption !== undefined) {
+                    decision.needsAction = true;
+                    decision.actionType = 'proactive';
+                    decision.reason = 'pathPlanning';
+                    decision.targetLane = bestOption;
+                }
+            }
+        }
+        
+        if (situation.upcomingBlock && ai.pathPlanning > 0.5) {
+            const blockInfo = situation.upcomingBlock;
+            const clearLanes = blockInfo.clearLanes;
+            
+            if (clearLanes.length > 0 && !clearLanes.includes(this.player.lane)) {
+                const targetLane = clearLanes.find(lane => {
+                    const dist = Math.abs(lane - this.player.lane);
+                    return dist <= 1 && this.isLaneSafeForChangeAdvanced(lane, situation,
+                        lane > this.player.lane ? 'right' : 'left');
+                });
+                
+                if (targetLane !== undefined) {
+                    decision.needsAction = true;
+                    decision.actionType = 'proactive';
+                    decision.reason = 'upcomingBlock';
+                    decision.targetLane = targetLane;
+                }
+            }
+        }
+        
+        return decision;
+    }
+    
+    executeDecision(decision, situation) {
+        if (!decision.needsAction) return;
+        if (decision.targetLane === this.player.lane) return;
+        
+        const ai = this.aiConfig;
+        
+        const accurateDecision = Math.random() < ai.decisionAccuracy;
+        
+        if (!accurateDecision) {
+            const alternativeLanes = situation.safeLanes.filter(l => 
+                l !== this.player.lane && l !== decision.targetLane
+            );
+            
+            if (alternativeLanes.length > 0) {
+                const randomLane = alternativeLanes[Math.floor(Math.random() * alternativeLanes.length)];
+                if (Math.abs(randomLane - this.player.lane) <= 1) {
+                    decision.targetLane = randomLane;
+                }
+            }
+        }
+        
+        const direction = decision.targetLane > this.player.lane ? 'right' : 'left';
+        if (this.isLaneSafeForChangeAdvanced(decision.targetLane, situation, direction)) {
+            this.startLaneChange(decision.targetLane);
+        }
+    }
+    
+    startLaneChange(targetLane) {
+        const ai = this.aiConfig;
+        
+        ai.isChangingLane = true;
+        ai.changeLaneStartLane = this.player.lane;
+        ai.changeLaneTargetLane = targetLane;
+        this.aiTargetLane = targetLane;
+        
+        this.player.lane = targetLane;
+        this.updatePlayerPosition();
+    }
+    
+    returnToCenterLane() {
+        const ai = this.aiConfig;
+        
+        if (ai.aggressiveDriving) return;
+        
+        const currentX = this.player.x;
+        const currentLaneCenter = this.trackOffset + this.laneWidth * this.player.lane + this.laneWidth / 2;
+        const distance = Math.abs(currentX - currentLaneCenter);
+        
+        if (distance < 5) {
+            this.aiTargetLane = this.player.lane;
+        }
+    }
+    
+    considerNearMiss(situation) {
+        const ai = this.aiConfig;
+        
+        if (ai.nearMissChance <= 0) return;
+        
+        if (!ai.aggressiveDriving) return;
+        
+        if (situation.immediateDanger || situation.nearDanger) return;
+        
+        const nearMissCandidates = [];
+        const safeDist = ai.safeDistance;
+        
+        const minSafeForNearMiss = ai.precisionDriving ? safeDist * 0.6 : safeDist * 0.9;
+        const maxRangeForNearMiss = safeDist * (ai.precisionDriving ? 3.0 : 2.5);
+        
+        for (let lane = 0; lane < this.lanes; lane++) {
+            if (lane === this.player.lane) continue;
+            
+            const laneChangeSafe = this.isLaneSafeForChangeAdvanced(lane, situation, 
+                lane > this.player.lane ? 'right' : 'left');
+            
+            if (!laneChangeSafe) continue;
+            
+            const obstacles = situation.laneObstacles[lane];
+            for (const obsInfo of obstacles) {
+                const dist = obsInfo.distance;
+                
+                if (dist > minSafeForNearMiss && dist < maxRangeForNearMiss) {
+                    nearMissCandidates.push({
+                        lane: lane,
+                        obstacle: obsInfo.obstacle,
+                        distance: dist,
+                        direction: lane > this.player.lane ? 'right' : 'left'
+                    });
+                }
+            }
+        }
+        
+        if (nearMissCandidates.length === 0) return;
+        
+        nearMissCandidates.sort((a, b) => a.distance - b.distance);
+        
+        let bestCandidate = nearMissCandidates[0];
+        
+        if (ai.precisionDriving) {
+            const idealDistance = safeDist * 1.2;
+            nearMissCandidates.sort((a, b) => {
+                const distA = Math.abs(a.distance - idealDistance);
+                const distB = Math.abs(b.distance - idealDistance);
+                return distA - distB;
+            });
+            bestCandidate = nearMissCandidates[0];
+        }
+        
+        const nearMissChance = ai.precisionDriving ? 
+            ai.nearMissChance * 0.015 : 
+            ai.nearMissChance * 0.006;
+        
+        if (Math.random() < nearMissChance) {
+            this.startNearMiss(bestCandidate);
+        }
+    }
+    
+    startNearMiss(candidate) {
+        const ai = this.aiConfig;
+        
+        ai.nearMissActive = true;
+        ai.nearMissTargetLane = candidate.lane;
+        ai.nearMissObstacle = candidate.obstacle;
+        ai.aggressiveDriving = true;
+        this.aiTargetLane = candidate.lane;
+        
+        this.player.lane = candidate.lane;
+        this.updatePlayerPosition();
     }
     
     analyzeSituation() {
@@ -497,6 +937,253 @@ class CarGame {
                 }
             }
         }
+    }
+    
+    analyzeSituationAdvanced() {
+        const ai = this.aiConfig;
+        const playerY = this.player.y;
+        const observationRange = ai.observationRange;
+        const safeDistance = ai.safeDistance;
+        
+        const situation = {
+            immediateDanger: false,
+            nearDanger: false,
+            farObstacles: [],
+            laneObstacles: [[], [], []],
+            laneScores: [0, 0, 0],
+            safeLanes: [],
+            hasNearByObstacles: false,
+            playerLane: this.player.lane,
+            complexSituation: false,
+            upcomingBlock: null,
+            allObstacles: []
+        };
+        
+        const immediateZoneStart = playerY - safeDistance - 50;
+        const immediateZoneEnd = playerY - 50;
+        const nearZoneStart = playerY - observationRange * 0.6;
+        const farZoneStart = playerY - observationRange;
+        
+        let totalObstaclesInRange = 0;
+        let lanesWithObstacles = 0;
+        
+        for (const obstacle of this.obstacles) {
+            const obsY = obstacle.visualY !== undefined ? obstacle.visualY : obstacle.y;
+            
+            if (obsY > farZoneStart && obsY < playerY + 100) {
+                const obsInfo = {
+                    obstacle: obstacle,
+                    distance: playerY - obsY,
+                    y: obsY,
+                    lane: obstacle.lane
+                };
+                
+                situation.allObstacles.push(obsInfo);
+                
+                if (obsY < immediateZoneEnd) {
+                    situation.laneObstacles[obstacle.lane].push(obsInfo);
+                    totalObstaclesInRange++;
+                }
+                
+                if (obsY > nearZoneStart && obsY < immediateZoneEnd) {
+                    situation.hasNearByObstacles = true;
+                }
+                
+                if (obsY > immediateZoneStart && obsY < immediateZoneEnd) {
+                    if (obstacle.lane === this.player.lane) {
+                        situation.immediateDanger = true;
+                    }
+                }
+                
+                if (obsY > nearZoneStart && obsY < immediateZoneEnd) {
+                    if (obstacle.lane === this.player.lane) {
+                        situation.nearDanger = true;
+                    }
+                }
+            }
+        }
+        
+        for (let lane = 0; lane < this.lanes; lane++) {
+            if (situation.laneObstacles[lane].length > 0) {
+                lanesWithObstacles++;
+            }
+        }
+        
+        if (totalObstaclesInRange >= 3 || lanesWithObstacles >= 2) {
+            situation.complexSituation = true;
+        }
+        
+        situation.upcomingBlock = this.detectUpcomingBlock(situation);
+        
+        for (let lane = 0; lane < this.lanes; lane++) {
+            situation.laneScores[lane] = this.scoreLaneAdvanced(lane, situation, safeDistance);
+        }
+        
+        const sortedLanes = [0, 1, 2].sort((a, b) => situation.laneScores[b] - situation.laneScores[a]);
+        situation.safeLanes = sortedLanes;
+        
+        return situation;
+    }
+    
+    detectUpcomingBlock(situation) {
+        const ai = this.aiConfig;
+        const playerY = this.player.y;
+        const safeDistance = ai.safeDistance;
+        
+        const blockZoneStart = playerY - safeDistance * 2;
+        const blockZoneEnd = playerY - safeDistance;
+        
+        const obstaclesInZone = situation.allObstacles.filter(obs => 
+            obs.y > blockZoneStart && obs.y < blockZoneEnd
+        );
+        
+        if (obstaclesInZone.length < 2) return null;
+        
+        const lanesCovered = new Set();
+        obstaclesInZone.forEach(obs => lanesCovered.add(obs.lane));
+        
+        if (lanesCovered.size >= 2) {
+            const clearLanes = [];
+            for (let lane = 0; lane < this.lanes; lane++) {
+                if (!lanesCovered.has(lane)) {
+                    clearLanes.push(lane);
+                }
+            }
+            
+            if (clearLanes.length > 0) {
+                return {
+                    isBlocked: true,
+                    blockedLanes: Array.from(lanesCovered),
+                    clearLanes: clearLanes,
+                    distance: playerY - blockZoneEnd
+                };
+            }
+        }
+        
+        return null;
+    }
+    
+    scoreLaneAdvanced(lane, situation, safeDistance) {
+        let score = 100;
+        const playerY = this.player.y;
+        const obstacles = situation.laneObstacles[lane];
+        
+        if (obstacles.length === 0) {
+            score += 60;
+        } else {
+            obstacles.sort((a, b) => a.distance - b.distance);
+            
+            const closestObs = obstacles[0];
+            const closestDist = closestObs.distance;
+            
+            if (closestDist < safeDistance * 0.5) {
+                score -= 200;
+            } else if (closestDist < safeDistance) {
+                score -= 150;
+            } else if (closestDist < safeDistance * 1.2) {
+                score -= 50;
+            } else if (closestDist < safeDistance * 1.5) {
+                score -= 20;
+            } else if (closestDist < safeDistance * 2) {
+                score -= 5;
+            }
+            
+            score += Math.min(closestDist / 1.5, 50);
+            
+            if (obstacles.length >= 2) {
+                const secondObs = obstacles[1];
+                if (secondObs.distance < safeDistance * 1.5) {
+                    score -= 30;
+                }
+                score -= obstacles.length * 8;
+            }
+            
+            for (const obs of obstacles) {
+                if (obs.distance < safeDistance * 0.3) {
+                    score -= 100;
+                }
+            }
+        }
+        
+        const distanceFromCurrent = Math.abs(lane - this.player.lane);
+        score -= distanceFromCurrent * 12;
+        
+        if (lane === 0 || lane === this.lanes - 1) {
+            score -= 8;
+        }
+        
+        if (lane === 1) {
+            score += 5;
+        }
+        
+        if (situation.upcomingBlock) {
+            if (situation.upcomingBlock.clearLanes.includes(lane)) {
+                score += 40;
+            } else if (situation.upcomingBlock.blockedLanes.includes(lane)) {
+                score -= 30;
+            }
+        }
+        
+        return score;
+    }
+    
+    isLaneSafeForChangeAdvanced(targetLane, situation, direction) {
+        const ai = this.aiConfig;
+        const safeDistance = ai.safeDistance;
+        const currentLane = this.player.lane;
+        
+        if (targetLane < 0 || targetLane >= this.lanes) return false;
+        if (Math.abs(targetLane - currentLane) > 1) return false;
+        
+        const targetObstacles = situation.laneObstacles[targetLane];
+        const currentObstacles = situation.laneObstacles[currentLane];
+        
+        const laneChangeTime = 15;
+        const speedFactor = this.speed / 100;
+        const effectiveSafeDistance = safeDistance * (1 + speedFactor * 0.5);
+        
+        for (const obsInfo of targetObstacles) {
+            const dist = obsInfo.distance;
+            
+            if (dist < effectiveSafeDistance * 0.6) {
+                return false;
+            }
+            
+            if (dist < effectiveSafeDistance && situation.immediateDanger) {
+                return false;
+            }
+        }
+        
+        for (const obsInfo of currentObstacles) {
+            const dist = obsInfo.distance;
+            
+            if (dist < safeDistance * 0.4) {
+                return false;
+            }
+            
+            if (dist < safeDistance * 0.8 && situation.nearDanger) {
+                return false;
+            }
+        }
+        
+        const middleLane = Math.min(currentLane, targetLane) + 0.5;
+        for (const obsInfo of situation.allObstacles) {
+            const obsLane = obsInfo.lane;
+            const dist = obsInfo.distance;
+            
+            if (dist < safeDistance * 0.5) {
+                if (obsLane === currentLane || obsLane === targetLane) {
+                    return false;
+                }
+            }
+        }
+        
+        const targetScore = situation.laneScores[targetLane];
+        if (targetScore < 50 && !situation.immediateDanger) {
+            return false;
+        }
+        
+        return true;
     }
     
     updatePlayer() {
