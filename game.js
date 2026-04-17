@@ -44,10 +44,10 @@ const RobotLevels = {
     master: {
         name: '车神',
         reactionTime: 0,
-        decisionAccuracy: 1.0,
+        decisionAccuracy: 0.99,
         pathPlanning: 1.0,
         nearMissChance: 0.5,
-        mistakeChance: 0,
+        mistakeChance: 0.02,
         maxSpeedMultiplier: 1.1,
         observationRange: 700,
         safeDistance: 75,
@@ -721,9 +721,7 @@ class CarGame {
         this.updatePlayerPosition();
         
         if (isEmergency) {
-            this.player.x = this.player.targetX;
-            this.player.velocityX = 0;
-            ai.isChangingLane = false;
+            ai.isEmergencyChange = true;
         }
     }
     
@@ -796,8 +794,8 @@ class CarGame {
         }
         
         const nearMissChance = ai.precisionDriving ? 
-            ai.nearMissChance * 0.015 : 
-            ai.nearMissChance * 0.006;
+            ai.nearMissChance * 0.08 : 
+            ai.nearMissChance * 0.03;
         
         if (Math.random() < nearMissChance) {
             this.startNearMiss(bestCandidate);
@@ -1298,26 +1296,38 @@ class CarGame {
         const trackRight = this.trackOffset + this.trackWidth;
         
         if (this.isRobot) {
+            const ai = this.aiConfig;
             const targetX = this.player.targetX;
             const currentX = this.player.x;
             const distance = targetX - currentX;
             
+            const isEmergency = ai.isEmergencyChange === true;
+            const currentAcceleration = isEmergency ? this.player.acceleration * 3 : this.player.acceleration;
+            const currentMaxVelocity = isEmergency ? this.player.maxVelocity * 2 : this.player.maxVelocity;
+            
             if (Math.abs(distance) > 5) {
                 if (distance > 0) {
-                    this.player.velocityX += this.player.acceleration * this.gameSpeed;
+                    this.player.velocityX += currentAcceleration * this.gameSpeed;
                 } else {
-                    this.player.velocityX -= this.player.acceleration * this.gameSpeed;
+                    this.player.velocityX -= currentAcceleration * this.gameSpeed;
                 }
             } else {
                 this.player.velocityX *= 0.8;
+                if (isEmergency) {
+                    ai.isEmergencyChange = false;
+                }
             }
+            
+            this.player.velocityX = Math.max(-currentMaxVelocity, 
+                Math.min(currentMaxVelocity, this.player.velocityX));
         } else {
             if (this.keys.left) this.player.velocityX -= this.player.acceleration * this.gameSpeed;
             if (this.keys.right) this.player.velocityX += this.player.acceleration * this.gameSpeed;
+            
+            this.player.velocityX = Math.max(-this.player.maxVelocity, 
+                Math.min(this.player.maxVelocity, this.player.velocityX));
         }
         
-        this.player.velocityX = Math.max(-this.player.maxVelocity, 
-            Math.min(this.player.maxVelocity, this.player.velocityX));
         this.player.velocityX *= this.player.friction;
         
         const newX = this.player.x + this.player.velocityX;
