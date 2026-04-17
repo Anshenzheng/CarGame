@@ -721,7 +721,9 @@ class CarGame {
         this.updatePlayerPosition();
         
         if (isEmergency) {
-            ai.isEmergencyChange = true;
+            this.player.x = this.player.targetX;
+            this.player.velocityX = 0;
+            ai.isChangingLane = false;
         }
     }
     
@@ -1260,11 +1262,7 @@ class CarGame {
         for (const obsInfo of currentObstacles) {
             const dist = obsInfo.distance;
             
-            if (dist < safeDistance * 0.4) {
-                return false;
-            }
-            
-            if (dist < safeDistance * 0.8 && situation.nearDanger) {
+            if (dist < safeDistance * 0.3) {
                 return false;
             }
         }
@@ -1296,38 +1294,26 @@ class CarGame {
         const trackRight = this.trackOffset + this.trackWidth;
         
         if (this.isRobot) {
-            const ai = this.aiConfig;
             const targetX = this.player.targetX;
             const currentX = this.player.x;
             const distance = targetX - currentX;
             
-            const isEmergency = ai.isEmergencyChange === true;
-            const currentAcceleration = isEmergency ? this.player.acceleration * 3 : this.player.acceleration;
-            const currentMaxVelocity = isEmergency ? this.player.maxVelocity * 2 : this.player.maxVelocity;
-            
             if (Math.abs(distance) > 5) {
                 if (distance > 0) {
-                    this.player.velocityX += currentAcceleration * this.gameSpeed;
+                    this.player.velocityX += this.player.acceleration * this.gameSpeed;
                 } else {
-                    this.player.velocityX -= currentAcceleration * this.gameSpeed;
+                    this.player.velocityX -= this.player.acceleration * this.gameSpeed;
                 }
             } else {
                 this.player.velocityX *= 0.8;
-                if (isEmergency) {
-                    ai.isEmergencyChange = false;
-                }
             }
-            
-            this.player.velocityX = Math.max(-currentMaxVelocity, 
-                Math.min(currentMaxVelocity, this.player.velocityX));
         } else {
             if (this.keys.left) this.player.velocityX -= this.player.acceleration * this.gameSpeed;
             if (this.keys.right) this.player.velocityX += this.player.acceleration * this.gameSpeed;
-            
-            this.player.velocityX = Math.max(-this.player.maxVelocity, 
-                Math.min(this.player.maxVelocity, this.player.velocityX));
         }
         
+        this.player.velocityX = Math.max(-this.player.maxVelocity, 
+            Math.min(this.player.maxVelocity, this.player.velocityX));
         this.player.velocityX *= this.player.friction;
         
         const newX = this.player.x + this.player.velocityX;
