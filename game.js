@@ -1350,13 +1350,22 @@ class CarGame {
             return;
         }
         
-        this.player.x = Math.max(playerMinX, Math.min(playerMaxX, newX));
-        const relativeX = this.player.x - this.trackOffset;
-        const newLane = Math.floor(relativeX / this.laneWidth);
+        const clampedX = Math.max(playerMinX, Math.min(playerMaxX, newX));
         
-        if (newLane !== this.player.lane && newLane >= 0 && newLane < this.lanes) {
-            this.player.lane = newLane;
-            this.updatePlayerPosition();
+        if (newX !== clampedX) {
+            this.player.velocityX = 0;
+        }
+        
+        this.player.x = clampedX;
+        
+        if (!this.isRobot || (!this.aiConfig?.isChangingLane && !this.aiConfig?.nearMissActive && !this.aiConfig?.isMistaking)) {
+            const relativeX = this.player.x - this.trackOffset;
+            const newLane = Math.floor(relativeX / this.laneWidth);
+            
+            if (newLane !== this.player.lane && newLane >= 0 && newLane < this.lanes) {
+                this.player.lane = newLane;
+                this.updatePlayerPosition();
+            }
         }
     }
     
