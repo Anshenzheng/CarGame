@@ -423,9 +423,25 @@ class CarGame {
     
     triggerMistake(situation) {
         const ai = this.aiConfig;
+        const speedFactor = this.speed / 100;
         
-        const mistakeTypes = ['wrongDirection', 'noAction', 'overshoot', 'slowReaction'];
-        const weights = [0.25, 0.35, 0.2, 0.2];
+        let mistakeTypes, weights;
+        
+        if (ai.precisionDriving) {
+            if (speedFactor > 1.2) {
+                mistakeTypes = ['noAction', 'slowReaction'];
+                weights = [0.7, 0.3];
+            } else if (speedFactor > 0.8) {
+                mistakeTypes = ['wrongDirection', 'noAction', 'slowReaction'];
+                weights = [0.15, 0.55, 0.3];
+            } else {
+                mistakeTypes = ['wrongDirection', 'noAction', 'overshoot', 'slowReaction'];
+                weights = [0.2, 0.4, 0.1, 0.3];
+            }
+        } else {
+            mistakeTypes = ['wrongDirection', 'noAction', 'overshoot', 'slowReaction'];
+            weights = [0.25, 0.35, 0.2, 0.2];
+        }
         
         let random = Math.random();
         let selectedType = mistakeTypes[0];
@@ -441,26 +457,41 @@ class CarGame {
         
         ai.isMistaking = true;
         ai.mistakeType = selectedType;
-        ai.mistakeTimer = Math.floor(Math.random() * 25) + 10;
+        
+        if (ai.precisionDriving && speedFactor > 1.0) {
+            ai.mistakeTimer = Math.floor(Math.random() * 12) + 5;
+        } else {
+            ai.mistakeTimer = Math.floor(Math.random() * 25) + 10;
+        }
         
         if (selectedType === 'wrongDirection') {
             const currentLane = this.player.lane;
             let targetLane;
             
-            if (situation.immediateDanger) {
-                const safeLanes = situation.safeLanes.filter(l => l !== currentLane);
+            const safeLanesForMistake = [];
+            for (let l = 0; l < this.lanes; l++) {
+                if (l !== currentLane) {
+                    if (ai.precisionDriving) {
+                        if (l > 0 && l < this.lanes - 1) {
+                            safeLanesForMistake.push(l);
+                        }
+                    } else {
+                        safeLanesForMistake.push(l);
+                    }
+                }
+            }
+            
+            if (safeLanesForMistake.length === 0) {
+                targetLane = currentLane;
+                ai.mistakeType = 'noAction';
+            } else if (situation.immediateDanger) {
+                const safeLanes = situation.safeLanes.filter(l => l !== currentLane && safeLanesForMistake.includes(l));
                 if (safeLanes.length > 0) {
-                    const bestLane = situation.safeLanes[0];
+                    const bestLane = safeLanes[0];
                     const worstLane = safeLanes[safeLanes.length - 1];
                     
-                    if (Math.random() < 0.7) {
-                        if (worstLane > currentLane && currentLane < this.lanes - 1) {
-                            targetLane = currentLane + 1;
-                        } else if (worstLane < currentLane && currentLane > 0) {
-                            targetLane = currentLane - 1;
-                        } else {
-                            targetLane = bestLane;
-                        }
+                    if (Math.random() < 0.5) {
+                        targetLane = worstLane;
                     } else {
                         targetLane = bestLane;
                     }
@@ -469,8 +500,8 @@ class CarGame {
                     ai.mistakeType = 'noAction';
                 }
             } else {
-                const canGoLeft = currentLane > 0;
-                const canGoRight = currentLane < this.lanes - 1;
+                const canGoLeft = safeLanesForMistake.includes(currentLane - 1);
+                const canGoRight = safeLanesForMistake.includes(currentLane + 1);
                 
                 if (canGoLeft && canGoRight) {
                     targetLane = Math.random() > 0.5 ? currentLane - 1 : currentLane + 1;
@@ -485,37 +516,63 @@ class CarGame {
             }
             
             if (targetLane !== currentLane) {
-                this.aiTargetLane = targetLane;
+                if (ai.precisionDriving) {
+                    if (targetLane === 0 || targetLane === this.lanes - 1) {
+                        ai.mistakeType = 'noAction';
+                    } else {
+                        this.aiTargetLane = targetLane;
+                    }
+                } else {
+                    this.aiTargetLane = targetLane;
+                }
             }
             
         } else if (selectedType === 'overshoot') {
             const currentLane = this.player.lane;
             let targetLane;
             
-            const canGoLeft = currentLane > 0;
-            const canGoRight = currentLane < this.lanes - 1;
-            
-            if (canGoLeft && canGoRight) {
-                if (Math.random() > 0.5) {
-                    if (currentLane - 1 > 0) {
-                        targetLane = currentLane - 1;
+            const safeLanesForMistake = [];
+            for (let l = 0; l < this.lanes; l++) {
+                if (l !== currentLane) {
+                    if (ai.precisionDriving) {
+                        if (l > 0 && l < this.lanes - 1) {
+                            safeLanesForMistake.push(l);
+                        }
                     } else {
-                        targetLane = currentLane + 1;
-                    }
-                } else {
-                    if (currentLane + 1 < this.lanes - 1) {
-                        targetLane = currentLane + 1;
-                    } else {
-                        targetLane = currentLane - 1;
+                        safeLanesForMistake.push(l);
                     }
                 }
-            } else if (canGoLeft) {
-                targetLane = Math.max(0, currentLane - 1);
-            } else if (canGoRight) {
-                targetLane = Math.min(this.lanes - 1, currentLane + 1);
-            } else {
+            }
+            
+            if (safeLanesForMistake.length === 0) {
                 targetLane = currentLane;
                 ai.mistakeType = 'noAction';
+            } else {
+                const canGoLeft = safeLanesForMistake.includes(currentLane - 1);
+                const canGoRight = safeLanesForMistake.includes(currentLane + 1);
+                
+                if (canGoLeft && canGoRight) {
+                    if (Math.random() > 0.5) {
+                        if (currentLane - 1 > 0) {
+                            targetLane = currentLane - 1;
+                        } else {
+                            targetLane = currentLane + 1;
+                        }
+                    } else {
+                        if (currentLane + 1 < this.lanes - 1) {
+                            targetLane = currentLane + 1;
+                        } else {
+                            targetLane = currentLane - 1;
+                        }
+                    }
+                } else if (canGoLeft) {
+                    targetLane = currentLane - 1;
+                } else if (canGoRight) {
+                    targetLane = currentLane + 1;
+                } else {
+                    targetLane = currentLane;
+                    ai.mistakeType = 'noAction';
+                }
             }
             
             if (targetLane !== currentLane) {
@@ -542,12 +599,29 @@ class CarGame {
                 decision.actionType = 'panic';
                 decision.reason = 'panic';
                 
-                const randomDirection = Math.random() > 0.5;
+                const safePanicLanes = [];
+                for (let l = 0; l < this.lanes; l++) {
+                    if (l !== currentLane) {
+                        if (ai.precisionDriving) {
+                            if (l > 0 && l < this.lanes - 1) {
+                                safePanicLanes.push(l);
+                            }
+                        } else {
+                            safePanicLanes.push(l);
+                        }
+                    }
+                }
+                
                 let panicTarget;
-                if (randomDirection && currentLane > 0) {
-                    panicTarget = currentLane - 1;
-                } else if (!randomDirection && currentLane < this.lanes - 1) {
-                    panicTarget = currentLane + 1;
+                if (safePanicLanes.length > 0) {
+                    const randomDirection = Math.random() > 0.5;
+                    if (randomDirection && safePanicLanes.includes(currentLane - 1)) {
+                        panicTarget = currentLane - 1;
+                    } else if (!randomDirection && safePanicLanes.includes(currentLane + 1)) {
+                        panicTarget = currentLane + 1;
+                    } else {
+                        panicTarget = safePanicLanes[Math.floor(Math.random() * safePanicLanes.length)];
+                    }
                 } else {
                     panicTarget = currentLane;
                 }
@@ -1084,8 +1158,25 @@ class CarGame {
         const ai = this.aiConfig;
         const baseSafeDistance = ai.safeDistance;
         const speedFactor = this.speed / 100;
-        const dynamicDistance = baseSafeDistance * (1 + speedFactor * 1.5);
-        return Math.max(baseSafeDistance * 0.8, Math.min(dynamicDistance, baseSafeDistance * 3.0));
+        
+        let dynamicDistance;
+        if (speedFactor > 1.5) {
+            dynamicDistance = baseSafeDistance * (1 + speedFactor * 2.5);
+        } else if (speedFactor > 1.0) {
+            dynamicDistance = baseSafeDistance * (1 + speedFactor * 2.0);
+        } else {
+            dynamicDistance = baseSafeDistance * (1 + speedFactor * 1.5);
+        }
+        
+        const maxMultiplier = this.isRobot && ai.precisionDriving ? 4.0 : 3.5;
+        return Math.max(baseSafeDistance * 0.8, Math.min(dynamicDistance, baseSafeDistance * maxMultiplier));
+    }
+    
+    predictObstacleDistance(obsInfo, framesAhead) {
+        const dist = obsInfo.distance;
+        const speedApproach = this.speed / 50;
+        const futureDist = dist - speedApproach * framesAhead;
+        return futureDist;
     }
     
     analyzeSituationAdvanced() {
@@ -1093,6 +1184,7 @@ class CarGame {
         const playerY = this.player.y;
         const observationRange = ai.observationRange;
         const safeDistance = this.getDynamicSafeDistance();
+        const speedFactor = this.speed / 100;
         
         const situation = {
             immediateDanger: false,
@@ -1105,18 +1197,23 @@ class CarGame {
             playerLane: this.player.lane,
             complexSituation: false,
             upcomingBlock: null,
-            allObstacles: []
+            allObstacles: [],
+            futureDanger10: false,
+            futureDanger5: false
         };
         
-        const criticalZoneStart = playerY - safeDistance * 1.5;
+        const criticalMultiplier = speedFactor > 1.5 ? 2.5 : (speedFactor > 1.0 ? 2.0 : 1.5);
+        const nearMultiplier = speedFactor > 1.5 ? 1.2 : 1.0;
+        
+        const criticalZoneStart = playerY - safeDistance * criticalMultiplier;
         const criticalZoneEnd = playerY + 50;
-        const nearZoneStart = playerY - observationRange * 0.7;
+        const nearZoneStart = playerY - observationRange * 0.7 * nearMultiplier;
         const nearZoneEnd = playerY + 50;
-        const farZoneStart = playerY - observationRange;
+        const farZoneStart = playerY - observationRange * (speedFactor > 1.2 ? 1.2 : 1.0);
         const detectionEnd = playerY + 100;
         
-        const criticalZThreshold = 0.15;
-        const nearZThreshold = 0.35;
+        const criticalZThreshold = speedFactor > 1.2 ? 0.2 : 0.15;
+        const nearZThreshold = speedFactor > 1.2 ? 0.45 : 0.35;
         
         let totalObstaclesInRange = 0;
         let lanesWithObstacles = 0;
@@ -1125,16 +1222,33 @@ class CarGame {
             const obsY = obstacle.visualY !== undefined ? obstacle.visualY : obstacle.y;
             const obsZ = obstacle.z !== undefined ? obstacle.z : 0;
             
-            const isInDetectionRange = (obsY > farZoneStart && obsY < detectionEnd) || (obsZ < 0.6);
-            if (!isInDetectionRange) continue;
+            const extendedFarZoneStart = playerY - observationRange * 1.5;
+            const isInExtendedRange = (obsY > extendedFarZoneStart && obsY < detectionEnd) || (obsZ < 0.75);
+            if (!isInExtendedRange) continue;
             
             const visualDistance = playerY - obsY;
             
-            let effectiveDistance;
-            if (obsZ > 0) {
-                effectiveDistance = visualDistance;
-            } else {
-                effectiveDistance = visualDistance;
+            const effectiveDistance = visualDistance;
+            
+            const tempObsInfo = {
+                obstacle: obstacle,
+                distance: effectiveDistance,
+                visualDistance: visualDistance,
+                y: obsY,
+                z: obsZ,
+                lane: obstacle.lane
+            };
+            
+            const futureDist5 = this.predictObstacleDistance(tempObsInfo, 5);
+            const futureDist10 = this.predictObstacleDistance(tempObsInfo, 10);
+            
+            if (obstacle.lane === this.player.lane) {
+                if (futureDist10 < safeDistance * 0.8 && futureDist10 > 0) {
+                    situation.futureDanger10 = true;
+                }
+                if (futureDist5 < safeDistance * 0.5 && futureDist5 > 0) {
+                    situation.futureDanger5 = true;
+                }
             }
             
             const isInCriticalZone = (obsY > criticalZoneStart && obsY < criticalZoneEnd) || (obsZ < criticalZThreshold);
@@ -1146,7 +1260,9 @@ class CarGame {
                 visualDistance: visualDistance,
                 y: obsY,
                 z: obsZ,
-                lane: obstacle.lane
+                lane: obstacle.lane,
+                futureDist5: futureDist5,
+                futureDist10: futureDist10
             };
             
             situation.allObstacles.push(obsInfo);
@@ -1157,13 +1273,13 @@ class CarGame {
                 situation.hasNearByObstacles = true;
             }
             
-            if (isInCriticalZone) {
+            if (isInCriticalZone || (futureDist5 < safeDistance * 0.3 && futureDist5 > 0)) {
                 if (obstacle.lane === this.player.lane) {
                     situation.immediateDanger = true;
                 }
             }
             
-            if (isInNearZone && !isInCriticalZone) {
+            if ((isInNearZone && !isInCriticalZone) || (futureDist10 < safeDistance * 0.6 && futureDist10 > 0)) {
                 if (obstacle.lane === this.player.lane) {
                     situation.nearDanger = true;
                 }
@@ -1309,7 +1425,20 @@ class CarGame {
         
         const laneChangeTime = 20;
         const speedFactor = this.speed / 100;
-        const effectiveSafeDistance = safeDistance * (1 + speedFactor * 1.2);
+        
+        let effectiveSafeDistance;
+        let futureCheckMultiplier;
+        
+        if (speedFactor > 1.5) {
+            effectiveSafeDistance = safeDistance * (1 + speedFactor * 2.0);
+            futureCheckMultiplier = 1.5;
+        } else if (speedFactor > 1.0) {
+            effectiveSafeDistance = safeDistance * (1 + speedFactor * 1.5);
+            futureCheckMultiplier = 1.2;
+        } else {
+            effectiveSafeDistance = safeDistance * (1 + speedFactor * 1.2);
+            futureCheckMultiplier = 1.0;
+        }
         
         const predictFutureDistance = (obsInfo, framesAhead) => {
             const dist = obsInfo.distance;
@@ -1323,24 +1452,25 @@ class CarGame {
             const futureDist5 = predictFutureDistance(obsInfo, 5);
             const futureDist10 = predictFutureDistance(obsInfo, 10);
             const futureDist15 = predictFutureDistance(obsInfo, 15);
+            const futureDist20 = predictFutureDistance(obsInfo, 20);
             
-            if (dist < effectiveSafeDistance * 0.8) {
+            if (dist < effectiveSafeDistance * 0.85 * futureCheckMultiplier) {
                 return false;
             }
             
-            if (futureDist5 < effectiveSafeDistance * 0.5) {
+            if (futureDist5 < effectiveSafeDistance * 0.6 * futureCheckMultiplier) {
                 return false;
             }
             
-            if (futureDist10 < effectiveSafeDistance * 0.3 && situation.immediateDanger) {
+            if (futureDist10 < effectiveSafeDistance * 0.4 * futureCheckMultiplier) {
                 return false;
             }
             
-            if (futureDist15 < 0 && situation.immediateDanger) {
+            if (futureDist15 < effectiveSafeDistance * 0.2 * futureCheckMultiplier) {
                 return false;
             }
             
-            if (dist < effectiveSafeDistance && situation.immediateDanger) {
+            if (futureDist20 < 0) {
                 return false;
             }
         }
@@ -1348,16 +1478,21 @@ class CarGame {
         for (const obsInfo of currentObstacles) {
             const dist = obsInfo.distance;
             const futureDist5 = predictFutureDistance(obsInfo, 5);
+            const futureDist10 = predictFutureDistance(obsInfo, 10);
             
-            if (dist < safeDistance * 0.6) {
+            if (dist < safeDistance * 0.75 * futureCheckMultiplier) {
                 return false;
             }
             
-            if (futureDist5 < safeDistance * 0.4) {
+            if (futureDist5 < safeDistance * 0.5 * futureCheckMultiplier) {
                 return false;
             }
             
-            if (dist < safeDistance * 1.0 && situation.nearDanger) {
+            if (futureDist10 < safeDistance * 0.3 * futureCheckMultiplier) {
+                return false;
+            }
+            
+            if (dist < safeDistance * 1.2 * futureCheckMultiplier && situation.nearDanger) {
                 return false;
             }
         }
@@ -1366,14 +1501,21 @@ class CarGame {
             const obsLane = obsInfo.lane;
             const dist = obsInfo.distance;
             const futureDist5 = predictFutureDistance(obsInfo, 5);
+            const futureDist10 = predictFutureDistance(obsInfo, 10);
             
-            if (dist < safeDistance * 0.7) {
+            if (dist < safeDistance * 0.8 * futureCheckMultiplier) {
                 if (obsLane === currentLane || obsLane === targetLane) {
                     return false;
                 }
             }
             
-            if (futureDist5 < safeDistance * 0.5) {
+            if (futureDist5 < safeDistance * 0.6 * futureCheckMultiplier) {
+                if (obsLane === currentLane || obsLane === targetLane) {
+                    return false;
+                }
+            }
+            
+            if (futureDist10 < safeDistance * 0.4 * futureCheckMultiplier) {
                 if (obsLane === currentLane || obsLane === targetLane) {
                     return false;
                 }
@@ -1381,17 +1523,30 @@ class CarGame {
         }
         
         const targetScore = situation.laneScores[targetLane];
-        if (targetScore < 60 && !situation.immediateDanger) {
+        const scoreThreshold = speedFactor > 1.2 ? 75 : 60;
+        if (targetScore < scoreThreshold && !situation.immediateDanger) {
             return false;
         }
         
         if (this.isRobot && ai.precisionDriving) {
-            if (!situation.immediateDanger && !situation.nearDanger) {
-                if (targetObstacles.length > 0) {
-                    const closestObs = targetObstacles.reduce((a, b) => 
-                        a.distance < b.distance ? a : b);
-                    if (closestObs.distance < effectiveSafeDistance * 1.2) {
-                        return false;
+            const extraSafeThreshold = speedFactor > 1.2 ? 1.8 : 1.4;
+            
+            if (targetObstacles.length > 0) {
+                const closestObs = targetObstacles.reduce((a, b) => 
+                    a.distance < b.distance ? a : b);
+                if (closestObs.distance < effectiveSafeDistance * extraSafeThreshold) {
+                    return false;
+                }
+            }
+            
+            if (ai.precisionDriving && speedFactor > 1.0) {
+                if (!situation.immediateDanger) {
+                    if (currentObstacles.length > 0) {
+                        const closestCurrent = currentObstacles.reduce((a, b) => 
+                            a.distance < b.distance ? a : b);
+                        if (closestCurrent.distance < safeDistance * extraSafeThreshold) {
+                            return false;
+                        }
                     }
                 }
             }
@@ -1445,7 +1600,7 @@ class CarGame {
         const playerLeftEdge = newX - this.player.width / 2;
         const playerRightEdge = newX + this.player.width / 2;
         
-        const bufferPercent = 0.05;
+        const bufferPercent = this.isRobot ? 0.12 : 0.05;
         const trackBuffer = this.trackWidth * bufferPercent;
         const bufferLeft = trackLeft + trackBuffer;
         const bufferRight = trackRight - trackBuffer;
@@ -1461,24 +1616,37 @@ class CarGame {
         const alreadyAtLeft = this.player.x - this.player.width / 2 <= trackLeft + 1;
         const alreadyAtRight = this.player.x + this.player.width / 2 >= trackRight - 1;
         
-        let stillMovingLeft, stillMovingRight;
-        if (this.isRobot) {
+        if (this.isRobot && this.aiConfig) {
             const targetX = this.player.targetX;
-            const targetWillHitLeft = targetX - this.player.width / 2 <= trackLeft;
-            const targetWillHitRight = targetX + this.player.width / 2 >= trackRight;
+            const targetLeftEdge = targetX - this.player.width / 2;
+            const targetRightEdge = targetX + this.player.width / 2;
             
-            stillMovingLeft = (this.player.velocityX < -0.5 || this.keys.left) && targetWillHitLeft;
-            stillMovingRight = (this.player.velocityX > 0.5 || this.keys.right) && targetWillHitRight;
-        } else {
-            stillMovingLeft = this.player.velocityX < -0.1 || this.keys.left;
-            stillMovingRight = this.player.velocityX > 0.1 || this.keys.right;
+            if (targetLeftEdge < bufferLeft) {
+                const newTargetLane = Math.max(1, this.player.lane);
+                this.player.targetX = this.trackOffset + this.laneWidth * newTargetLane + this.laneWidth / 2;
+                if (this.aiConfig.isMistaking && this.aiConfig.aiTargetLane !== undefined) {
+                    this.aiTargetLane = newTargetLane;
+                }
+            } else if (targetRightEdge > bufferRight) {
+                const newTargetLane = Math.min(this.lanes - 2, this.player.lane);
+                this.player.targetX = this.trackOffset + this.laneWidth * newTargetLane + this.laneWidth / 2;
+                if (this.aiConfig.isMistaking && this.aiConfig.aiTargetLane !== undefined) {
+                    this.aiTargetLane = newTargetLane;
+                }
+            }
         }
         
-        const velocityThreshold = this.isRobot ? 0.8 : 0.1;
-        const hardCollision = (alreadyAtLeft && stillMovingLeft && this.player.velocityX < -velocityThreshold) || 
-                              (alreadyAtRight && stillMovingRight && this.player.velocityX > velocityThreshold) ||
-                              (willHitLeftEdge && Math.abs(this.player.velocityX) > velocityThreshold * 2) ||
-                              (willHitRightEdge && Math.abs(this.player.velocityX) > velocityThreshold * 2);
+        let hardCollision = false;
+        if (!this.isRobot) {
+            const stillMovingLeft = this.player.velocityX < -0.1 || this.keys.left;
+            const stillMovingRight = this.player.velocityX > 0.1 || this.keys.right;
+            const velocityThreshold = 0.1;
+            
+            hardCollision = (alreadyAtLeft && stillMovingLeft && this.player.velocityX < -velocityThreshold) || 
+                           (alreadyAtRight && stillMovingRight && this.player.velocityX > velocityThreshold) ||
+                           (willHitLeftEdge && Math.abs(this.player.velocityX) > velocityThreshold * 2) ||
+                           (willHitRightEdge && Math.abs(this.player.velocityX) > velocityThreshold * 2);
+        }
         
         if (hardCollision) {
             this.createCollisionParticles(this.player.x, this.player.y);
@@ -1487,23 +1655,37 @@ class CarGame {
         }
         
         if (isInBuffer) {
-            if (isInLeftBuffer && this.player.velocityX < 0) {
-                this.player.velocityX *= 0.5;
-                this.player.velocityX += 0.3;
-            } else if (isInRightBuffer && this.player.velocityX > 0) {
-                this.player.velocityX *= 0.5;
-                this.player.velocityX -= 0.3;
+            const speedFactor = Math.abs(this.player.velocityX);
+            const bounceStrength = this.isRobot ? 0.8 : 0.5;
+            const dampening = this.isRobot ? 0.4 : 0.5;
+            
+            if (isInLeftBuffer) {
+                if (this.player.velocityX < 0) {
+                    this.player.velocityX *= dampening;
+                    this.player.velocityX += bounceStrength;
+                } else if (this.isRobot) {
+                    this.player.velocityX += 0.2;
+                }
+            } else if (isInRightBuffer) {
+                if (this.player.velocityX > 0) {
+                    this.player.velocityX *= dampening;
+                    this.player.velocityX -= bounceStrength;
+                } else if (this.isRobot) {
+                    this.player.velocityX -= 0.2;
+                }
             }
         }
         
         const clampedX = Math.max(playerMinX, Math.min(playerMaxX, newX));
         
         if (newX !== clampedX) {
-            this.player.velocityX *= 0.3;
-            if (this.player.velocityX > 0) {
-                this.player.velocityX = -Math.abs(this.player.velocityX);
-            } else {
+            const bounceFactor = this.isRobot ? 0.6 : 0.3;
+            this.player.velocityX *= bounceFactor;
+            
+            if (playerLeftEdge <= trackLeft && this.player.velocityX < 0) {
                 this.player.velocityX = Math.abs(this.player.velocityX);
+            } else if (playerRightEdge >= trackRight && this.player.velocityX > 0) {
+                this.player.velocityX = -Math.abs(this.player.velocityX);
             }
         }
         
