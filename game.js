@@ -44,16 +44,16 @@ const RobotLevels = {
     master: {
         name: '车神',
         reactionTime: 0,
-        decisionAccuracy: 0.99,
+        decisionAccuracy: 0.98,
         pathPlanning: 1.0,
-        nearMissChance: 0.5,
-        mistakeChance: 0.02,
+        nearMissChance: 0.85,
+        mistakeChance: 0.08,
         maxSpeedMultiplier: 1.1,
         observationRange: 700,
-        safeDistance: 75,
+        safeDistance: 65,
         canPlanAhead: true,
         aggressiveDriving: true,
-        panicChance: 0,
+        panicChance: 0.03,
         precisionDriving: true
     }
 };
@@ -379,7 +379,8 @@ class CarGame {
         const ai = this.aiConfig;
         
         if (ai.mistakeType === 'wrongDirection') {
-            const targetX = this.trackOffset + this.laneWidth * this.aiTargetLane + this.laneWidth / 2;
+            this.player.targetX = this.trackOffset + this.laneWidth * this.aiTargetLane + this.laneWidth / 2;
+            const targetX = this.player.targetX;
             const distance = Math.abs(this.player.x - targetX);
             if (distance < 10) {
                 this.player.lane = this.aiTargetLane;
@@ -387,12 +388,14 @@ class CarGame {
             }
         } else if (ai.mistakeType === 'noAction') {
         } else if (ai.mistakeType === 'overshoot') {
-            const targetX = this.trackOffset + this.laneWidth * this.aiTargetLane + this.laneWidth / 2;
+            this.player.targetX = this.trackOffset + this.laneWidth * this.aiTargetLane + this.laneWidth / 2;
+            const targetX = this.player.targetX;
             const distance = Math.abs(this.player.x - targetX);
             if (distance < 10) {
                 this.player.lane = this.aiTargetLane;
                 this.updatePlayerPosition();
             }
+        } else if (ai.mistakeType === 'slowReaction') {
         }
     }
     
@@ -717,8 +720,7 @@ class CarGame {
         ai.changeLaneTargetLane = targetLane;
         this.aiTargetLane = targetLane;
         
-        this.player.lane = targetLane;
-        this.updatePlayerPosition();
+        this.player.targetX = this.trackOffset + this.laneWidth * targetLane + this.laneWidth / 2;
         
         if (isEmergency) {
             ai.isEmergencyChange = true;
@@ -751,8 +753,8 @@ class CarGame {
         const nearMissCandidates = [];
         const safeDist = ai.safeDistance;
         
-        const minSafeForNearMiss = ai.precisionDriving ? safeDist * 0.6 : safeDist * 0.9;
-        const maxRangeForNearMiss = safeDist * (ai.precisionDriving ? 3.0 : 2.5);
+        const minSafeForNearMiss = ai.precisionDriving ? safeDist * 0.35 : safeDist * 0.9;
+        const maxRangeForNearMiss = safeDist * (ai.precisionDriving ? 4.0 : 2.5);
         
         for (let lane = 0; lane < this.lanes; lane++) {
             if (lane === this.player.lane) continue;
@@ -794,7 +796,7 @@ class CarGame {
         }
         
         const nearMissChance = ai.precisionDriving ? 
-            ai.nearMissChance * 0.08 : 
+            ai.nearMissChance * 0.15 : 
             ai.nearMissChance * 0.03;
         
         if (Math.random() < nearMissChance) {
@@ -811,8 +813,7 @@ class CarGame {
         ai.aggressiveDriving = true;
         this.aiTargetLane = candidate.lane;
         
-        this.player.lane = candidate.lane;
-        this.updatePlayerPosition();
+        this.player.targetX = this.trackOffset + this.laneWidth * candidate.lane + this.laneWidth / 2;
     }
     
     analyzeSituation() {
@@ -2341,6 +2342,7 @@ class GameManager {
         document.getElementById('robot-score').textContent = '0';
         if (this.playerGame) this.playerGame.startGame();
         if (this.robotGame) this.robotGame.startGame();
+        this.competitiveGameLoop();
     }
     
     competitiveGameLoop() {
