@@ -46,14 +46,14 @@ const RobotLevels = {
         reactionTime: 0,
         decisionAccuracy: 0.98,
         pathPlanning: 1.0,
-        nearMissChance: 0.85,
-        mistakeChance: 0.08,
+        nearMissChance: 0.75,
+        mistakeChance: 0.05,
         maxSpeedMultiplier: 1.1,
         observationRange: 700,
-        safeDistance: 65,
+        safeDistance: 72,
         canPlanAhead: true,
         aggressiveDriving: true,
-        panicChance: 0.03,
+        panicChance: 0.02,
         precisionDriving: true
     }
 };
@@ -136,8 +136,8 @@ class CarGame {
             nearMissActive: false,
             nearMissTargetLane: -1,
             nearMissObstacle: null,
-            aggressiveDriving: false,
-            lastObstacleCount: 0
+            lastObstacleCount: 0,
+            originalAggressiveDriving: level.aggressiveDriving
         };
         this.aiTargetLane = 1;
     }
@@ -753,8 +753,8 @@ class CarGame {
         const nearMissCandidates = [];
         const safeDist = ai.safeDistance;
         
-        const minSafeForNearMiss = ai.precisionDriving ? safeDist * 0.35 : safeDist * 0.9;
-        const maxRangeForNearMiss = safeDist * (ai.precisionDriving ? 4.0 : 2.5);
+        const minSafeForNearMiss = ai.precisionDriving ? safeDist * 0.55 : safeDist * 0.9;
+        const maxRangeForNearMiss = safeDist * (ai.precisionDriving ? 3.5 : 2.5);
         
         for (let lane = 0; lane < this.lanes; lane++) {
             if (lane === this.player.lane) continue;
@@ -796,7 +796,7 @@ class CarGame {
         }
         
         const nearMissChance = ai.precisionDriving ? 
-            ai.nearMissChance * 0.15 : 
+            ai.nearMissChance * 0.10 : 
             ai.nearMissChance * 0.03;
         
         if (Math.random() < nearMissChance) {
@@ -810,7 +810,6 @@ class CarGame {
         ai.nearMissActive = true;
         ai.nearMissTargetLane = candidate.lane;
         ai.nearMissObstacle = candidate.obstacle;
-        ai.aggressiveDriving = true;
         this.aiTargetLane = candidate.lane;
         
         this.player.targetX = this.trackOffset + this.laneWidth * candidate.lane + this.laneWidth / 2;
@@ -1339,12 +1338,25 @@ class CarGame {
         const willHitRightEdge = playerRightEdge >= trackRight && this.player.velocityX > 0;
         const alreadyAtLeft = this.player.x - this.player.width / 2 <= trackLeft + 1;
         const alreadyAtRight = this.player.x + this.player.width / 2 >= trackRight - 1;
-        const stillMovingLeft = this.player.velocityX < -0.1 || this.keys.left;
-        const stillMovingRight = this.player.velocityX > 0.1 || this.keys.right;
+        
+        let stillMovingLeft, stillMovingRight;
+        if (this.isRobot) {
+            const targetX = this.player.targetX;
+            const targetWillHitLeft = targetX - this.player.width / 2 <= trackLeft;
+            const targetWillHitRight = targetX + this.player.width / 2 >= trackRight;
+            
+            stillMovingLeft = (this.player.velocityX < -0.5 || this.keys.left) && targetWillHitLeft;
+            stillMovingRight = (this.player.velocityX > 0.5 || this.keys.right) && targetWillHitRight;
+        } else {
+            stillMovingLeft = this.player.velocityX < -0.1 || this.keys.left;
+            stillMovingRight = this.player.velocityX > 0.1 || this.keys.right;
+        }
+        
+        const velocityThreshold = this.isRobot ? 0.5 : 0.1;
         
         if ((alreadyAtLeft && stillMovingLeft) || (alreadyAtRight && stillMovingRight) ||
-            (willHitLeftEdge && Math.abs(this.player.velocityX) > 0.1) ||
-            (willHitRightEdge && Math.abs(this.player.velocityX) > 0.1)) {
+            (willHitLeftEdge && Math.abs(this.player.velocityX) > velocityThreshold) ||
+            (willHitRightEdge && Math.abs(this.player.velocityX) > velocityThreshold)) {
             this.createCollisionParticles(this.player.x, this.player.y);
             this.gameOver();
             return;
